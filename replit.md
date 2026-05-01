@@ -20,6 +20,11 @@ Full-stack vacation rental management web app built specifically for the Canary 
 - **State**: TanStack Query (React Query)
 - **UI**: shadcn/ui + Radix + Tailwind
 
+## Customer-Facing Routes (public, no login required)
+
+- `/stay` — public landing page: hero + property cards grid + search + "why book direct" section
+- `/stay/:id` — public property detail: photos, amenities, availability calendar, booking form (collects name/email/phone/dates, creates a pending booking, shows confirmation reference)
+
 ## Key Features
 
 - **Property Management**: Full CRUD for properties with VV license number (Vivienda Vacacional), IGIC toggle (7% Canary Islands tax), nightly rate and max guests

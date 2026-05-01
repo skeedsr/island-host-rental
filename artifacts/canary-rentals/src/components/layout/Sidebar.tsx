@@ -1,4 +1,4 @@
-import { Home, Building, Calendar, ListTodo, Settings, LogOut, Menu } from "lucide-react";
+import { Home, Building, Calendar, ListTodo, Settings, LogOut, ExternalLink } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 
@@ -41,7 +41,16 @@ export function Sidebar() {
           );
         })}
       </nav>
-      <div className="border-t p-4">
+      <div className="border-t p-4 space-y-1">
+        <a
+          href="/stay"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+        >
+          <ExternalLink className="h-4 w-4" />
+          Customer View
+        </a>
         <div className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground cursor-pointer">
           <Settings className="h-4 w-4" />
           Settings

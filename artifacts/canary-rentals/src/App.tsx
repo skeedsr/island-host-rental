@@ -12,21 +12,31 @@ import Bookings from "@/pages/Bookings";
 import BookingDetail from "@/pages/BookingDetail";
 import CalendarPage from "@/pages/CalendarPage";
 
+import PublicLanding from "@/pages/PublicLanding";
+import PublicProperty from "@/pages/PublicProperty";
+
 const queryClient = new QueryClient();
 
 function Router() {
   return (
-    <Shell>
-      <Switch>
-        <Route path="/" component={Dashboard} />
-        <Route path="/properties" component={Properties} />
-        <Route path="/properties/:id" component={PropertyDetail} />
-        <Route path="/bookings" component={Bookings} />
-        <Route path="/bookings/:id" component={BookingDetail} />
-        <Route path="/calendar" component={CalendarPage} />
-        <Route component={NotFound} />
-      </Switch>
-    </Shell>
+    <Switch>
+      <Route path="/stay" component={PublicLanding} />
+      <Route path="/stay/:id" component={PublicProperty} />
+
+      <Route>
+        <Shell>
+          <Switch>
+            <Route path="/" component={Dashboard} />
+            <Route path="/properties" component={Properties} />
+            <Route path="/properties/:id" component={PropertyDetail} />
+            <Route path="/bookings" component={Bookings} />
+            <Route path="/bookings/:id" component={BookingDetail} />
+            <Route path="/calendar" component={CalendarPage} />
+            <Route component={NotFound} />
+          </Switch>
+        </Shell>
+      </Route>
+    </Switch>
   );
 }
 
