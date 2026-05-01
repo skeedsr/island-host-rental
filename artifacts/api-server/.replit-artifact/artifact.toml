@@ -15,11 +15,4 @@ kind = "api"
   [services.env]
   PORT = "8080"
   BASE_PATH = "/"
-
-  [services.production]
-  run = "NODE_ENV=production node --enable-source-maps artifacts/api-server/dist/index.mjs"
-  build = "sh -c 'NODE_ENV=production BASE_PATH=/ PORT=8080 pnpm --filter @workspace/canary-rentals run build && pnpm --filter @workspace/api-server run build'"
-
-  [services.production.health.startup]
-  path = "/api/healthz"
   
