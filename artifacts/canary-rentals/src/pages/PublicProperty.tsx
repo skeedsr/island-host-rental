@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useParams, Link, useLocation } from "wouter";
+import { useAuth, useClerk } from "@clerk/clerk-react";
 import {
   useGetProperty,
   useListBookings,
@@ -180,6 +181,8 @@ export default function PublicProperty() {
   const propertyId = parseInt(id || "0", 10);
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
+  const { isSignedIn } = useAuth();
+  const { openSignIn } = useClerk();
   const [showBookingForm, setShowBookingForm] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [confirmedRef, setConfirmedRef] = useState<string>("");
@@ -444,12 +447,22 @@ export default function PublicProperty() {
 
               <Button
                 className="w-full h-11 text-base font-bold"
-                onClick={() => setShowBookingForm(true)}
+                onClick={() => {
+                  if (!isSignedIn) {
+                    openSignIn({ redirectUrl: window.location.href });
+                  } else {
+                    setShowBookingForm(true);
+                  }
+                }}
                 disabled={!watchStart || !watchEnd || nights <= 0}
                 data-testid="button-book-now"
               >
                 <CalendarDays className="h-4 w-4 mr-2" />
-                {!watchStart || !watchEnd ? "Select dates to book" : "Request to Book"}
+                {!watchStart || !watchEnd
+                  ? "Select dates to book"
+                  : isSignedIn
+                  ? "Request to Book"
+                  : "Sign in to Book"}
               </Button>
 
               <div className="space-y-2">

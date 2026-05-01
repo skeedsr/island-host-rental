@@ -13,6 +13,7 @@ import {
   ExportPropertyIcalQueryParams,
 } from "@workspace/api-zod";
 import { syncICalFeed, generateICalFeed } from "../lib/ical";
+import { requireAdmin } from "../middlewares/auth";
 
 const router = Router();
 
@@ -27,7 +28,7 @@ router.get("/properties", async (req, res) => {
   res.json(mapped);
 });
 
-router.post("/properties", async (req, res) => {
+router.post("/properties", requireAdmin, async (req, res) => {
   const parsed = CreatePropertyBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.flatten() });
@@ -84,7 +85,7 @@ router.get("/properties/:id", async (req, res) => {
   });
 });
 
-router.put("/properties/:id", async (req, res) => {
+router.put("/properties/:id", requireAdmin, async (req, res) => {
   const paramsParsed = UpdatePropertyParams.safeParse({ id: Number(req.params.id) });
   if (!paramsParsed.success) {
     res.status(400).json({ error: "Invalid id" });
@@ -128,7 +129,7 @@ router.put("/properties/:id", async (req, res) => {
   });
 });
 
-router.delete("/properties/:id", async (req, res) => {
+router.delete("/properties/:id", requireAdmin, async (req, res) => {
   const parsed = DeletePropertyParams.safeParse({ id: Number(req.params.id) });
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid id" });
@@ -139,7 +140,7 @@ router.delete("/properties/:id", async (req, res) => {
   res.status(204).send();
 });
 
-router.post("/properties/:id/sync", async (req, res) => {
+router.post("/properties/:id/sync", requireAdmin, async (req, res) => {
   const parsed = SyncPropertyIcalParams.safeParse({ id: Number(req.params.id) });
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid id" });

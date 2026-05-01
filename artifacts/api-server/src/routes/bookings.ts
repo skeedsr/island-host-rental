@@ -9,6 +9,7 @@ import {
   DeleteBookingParams,
   ListBookingsQueryParams,
 } from "@workspace/api-zod";
+import { requireAdmin, requireUser } from "../middlewares/auth";
 
 const router = Router();
 
@@ -50,7 +51,7 @@ router.get("/bookings", async (req, res) => {
   res.json(bookings);
 });
 
-router.post("/bookings", async (req, res) => {
+router.post("/bookings", requireUser, async (req, res) => {
   const parsed = CreateBookingBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.flatten() });
@@ -91,7 +92,7 @@ router.post("/bookings", async (req, res) => {
   res.status(201).json(booking);
 });
 
-router.get("/bookings/:id", async (req, res) => {
+router.get("/bookings/:id", requireAdmin, async (req, res) => {
   const parsed = GetBookingParams.safeParse({ id: Number(req.params.id) });
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid id" });
@@ -111,7 +112,7 @@ router.get("/bookings/:id", async (req, res) => {
   res.json(booking);
 });
 
-router.put("/bookings/:id", async (req, res) => {
+router.put("/bookings/:id", requireAdmin, async (req, res) => {
   const paramsParsed = UpdateBookingParams.safeParse({ id: Number(req.params.id) });
   if (!paramsParsed.success) {
     res.status(400).json({ error: "Invalid id" });
@@ -167,7 +168,7 @@ router.put("/bookings/:id", async (req, res) => {
   res.json(updated);
 });
 
-router.delete("/bookings/:id", async (req, res) => {
+router.delete("/bookings/:id", requireAdmin, async (req, res) => {
   const parsed = DeleteBookingParams.safeParse({ id: Number(req.params.id) });
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid id" });

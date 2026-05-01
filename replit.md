@@ -20,6 +20,28 @@ Full-stack vacation rental management web app built specifically for the Canary 
 - **State**: TanStack Query (React Query)
 - **UI**: shadcn/ui + Radix + Tailwind
 
+## Authentication
+
+Clerk-based auth with role-based access control:
+- **Admin** (`publicMetadata.role = "admin"`) — full dashboard access, user management
+- **User** (`publicMetadata.role = "user"`) — can browse public pages and submit bookings
+
+### Setup (required before admin dashboard is accessible)
+1. Go to [clerk.com](https://clerk.com), create an app
+2. In Replit Secrets, set:
+   - `VITE_CLERK_PUBLISHABLE_KEY` — from Clerk dashboard (starts with `pk_`)
+   - `CLERK_SECRET_KEY` — from Clerk dashboard (starts with `sk_`)
+   - `CLERK_PUBLISHABLE_KEY` — same value as `VITE_CLERK_PUBLISHABLE_KEY` (for backend proxy)
+3. Make the first user an admin: use Clerk dashboard → Users → Metadata → set `{ "role": "admin" }`
+   Or use the `/api/admin/users/:id/role` endpoint once you have one admin
+
+### Key files
+- `artifacts/api-server/src/middlewares/auth.ts` — `requireUser`, `requireAdmin` middleware
+- `artifacts/api-server/src/routes/admin.ts` — `GET/PATCH /api/admin/users` endpoints
+- `artifacts/canary-rentals/src/components/AdminGuard.tsx` — wraps all admin routes
+- `artifacts/canary-rentals/src/pages/Users.tsx` — user role management UI
+- `lib/api-client-react/src/custom-fetch.ts` — `setAuthTokenGetter` injects Bearer tokens
+
 ## Customer-Facing Routes (public, no login required)
 
 - `/stay` — public landing page: hero + property cards grid + search + "why book direct" section

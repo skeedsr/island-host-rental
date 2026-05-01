@@ -1,8 +1,11 @@
 import { Router } from "express";
 import { db, propertiesTable, bookingsTable } from "@workspace/db";
 import { eq, and, gte, lte, not } from "drizzle-orm";
+import { requireAdmin } from "../middlewares/auth";
 
 const router = Router();
+
+router.use(requireAdmin);
 
 router.get("/dashboard/summary", async (req, res) => {
   const now = new Date();
