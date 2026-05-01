@@ -13,7 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Building, Users, CalendarCheck, TrendingUp, Key, ArrowRight } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line, AreaChart, Area } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line, AreaChart, Area, Cell } from "recharts";
 import { format, parseISO } from "date-fns";
 
 export default function Dashboard() {
@@ -225,7 +225,7 @@ export default function Dashboard() {
                       if (entry.source === 'Airbnb') color = 'hsl(var(--chart-3))';
                       if (entry.source === 'Booking.com') color = 'hsl(var(--chart-4))';
                       if (entry.source === 'VRBO') color = 'hsl(var(--chart-2))';
-                      return <cell key={`cell-${index}`} fill={color} />;
+                      return <Cell key={`cell-${index}`} fill={color} />;
                     })}
                   </Bar>
                 </BarChart>

@@ -6,6 +6,7 @@ import {
   useListBookings,
   useCreateBooking,
   getListBookingsQueryKey,
+  getGetPropertyQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { PublicLayout } from "@/components/layout/PublicLayout";
@@ -188,11 +189,11 @@ export default function PublicProperty() {
   const [confirmedRef, setConfirmedRef] = useState<string>("");
 
   const { data: property, isLoading: loadingProp } = useGetProperty(propertyId, {
-    query: { enabled: !!propertyId },
+    query: { enabled: !!propertyId, queryKey: getGetPropertyQueryKey(propertyId) },
   });
   const { data: bookings } = useListBookings(
     { propertyId },
-    { query: { enabled: !!propertyId } }
+    { query: { enabled: !!propertyId, queryKey: getListBookingsQueryKey({ propertyId }) } }
   );
   const createBooking = useCreateBooking();
 
@@ -218,8 +219,8 @@ export default function PublicProperty() {
       : 0;
 
   const estimatedTotal =
-    nights > 0 && property?.nightlyRate != null
-      ? nights * property.nightlyRate
+    nights > 0 && property?.nightly_rate != null
+      ? nights * property.nightly_rate
       : null;
 
   const bookedRanges = (bookings ?? [])
@@ -327,16 +328,16 @@ export default function PublicProperty() {
                   <MapPin className="h-4 w-4" />
                   {property.location}
                 </span>
-                {property.maxGuests && (
+                {property.max_guests && (
                   <span className="flex items-center gap-1.5">
                     <Users className="h-4 w-4" />
-                    Up to {property.maxGuests} guests
+                    Up to {property.max_guests} guests
                   </span>
                 )}
-                {property.nightlyRate != null && (
+                {property.nightly_rate != null && (
                   <span className="flex items-center gap-1.5 font-semibold text-foreground">
                     <Euro className="h-4 w-4" />
-                    {property.nightlyRate}/night
+                    {property.nightly_rate}/night
                   </span>
                 )}
               </div>
@@ -376,10 +377,10 @@ export default function PublicProperty() {
           <div>
             <div className="sticky top-20 rounded-2xl border bg-card shadow-md p-6 space-y-5">
               <div className="text-center">
-                {property.nightlyRate != null && (
+                {property.nightly_rate != null && (
                   <div className="flex items-baseline justify-center gap-1">
                     <span className="text-3xl font-extrabold text-primary">
-                      €{property.nightlyRate}
+                      €{property.nightly_rate}
                     </span>
                     <span className="text-muted-foreground text-sm">/ night</span>
                   </div>
@@ -425,7 +426,7 @@ export default function PublicProperty() {
                 <div className="rounded-lg bg-muted/50 p-3 space-y-1.5 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">
-                      €{property.nightlyRate} × {nights} night{nights !== 1 ? "s" : ""}
+                      €{property.nightly_rate} × {nights} night{nights !== 1 ? "s" : ""}
                     </span>
                     <span>€{estimatedTotal.toFixed(2)}</span>
                   </div>

@@ -145,8 +145,8 @@ export default function PublicLanding() {
                     <div className="absolute bottom-3 right-3">
                       <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-primary text-white shadow">
                         <Euro className="h-3 w-3" />
-                        {property.nightlyRate != null
-                          ? `${property.nightlyRate}/night`
+                        {property.nightly_rate != null
+                          ? `${property.nightly_rate}/night`
                           : "Ask"}
                       </span>
                     </div>
@@ -171,10 +171,10 @@ export default function PublicLanding() {
                       </p>
                     )}
                     <div className="flex items-center justify-between">
-                      {property.maxGuests && (
+                      {property.max_guests && (
                         <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
                           <Users className="h-3.5 w-3.5" />
-                          Up to {property.maxGuests} guests
+                          Up to {property.max_guests} guests
                         </span>
                       )}
                       <span className="ml-auto text-sm font-semibold text-primary group-hover:underline">
