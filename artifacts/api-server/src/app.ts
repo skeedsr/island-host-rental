@@ -2,18 +2,11 @@ import path from "path";
 import express, { type Express } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
-import { clerkMiddleware } from "@clerk/express";
 import { createProxyMiddleware } from "http-proxy-middleware";
 import router from "./routes";
 import { logger } from "./lib/logger";
-import {
-  CLERK_PROXY_PATH,
-  clerkProxyMiddleware,
-} from "./middlewares/clerkProxyMiddleware";
 
 const app: Express = express();
-
-app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
 
 app.use(
   pinoHttp({
@@ -37,17 +30,9 @@ app.use(
 
 app.use(cors());
 
-// Health check must be registered before Clerk middleware so it always
-// returns 200 regardless of whether Clerk keys are configured.
 app.get("/api/healthz", (_req, res) => {
   res.json({ status: "ok" });
 });
-
-// Only attach Clerk middleware when keys are present (safe for deployments
-// that haven't configured Clerk yet).
-if (process.env.CLERK_PUBLISHABLE_KEY || process.env.CLERK_SECRET_KEY) {
-  app.use(clerkMiddleware());
-}
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
