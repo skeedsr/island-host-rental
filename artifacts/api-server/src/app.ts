@@ -47,7 +47,7 @@ if (process.env.NODE_ENV === "production") {
     "artifacts/canary-rentals/dist/public",
   );
   app.use(express.static(frontendDir));
-  app.get("*", (_req, res) => {
+  app.get(/.*/, (_req, res) => {
     res.sendFile(path.join(frontendDir, "index.html"));
   });
 } else {
