@@ -34,8 +34,21 @@ app.use(
     },
   }),
 );
+
 app.use(cors());
-app.use(clerkMiddleware());
+
+// Health check must be registered before Clerk middleware so it always
+// returns 200 regardless of whether Clerk keys are configured.
+app.get("/api/healthz", (_req, res) => {
+  res.json({ status: "ok" });
+});
+
+// Only attach Clerk middleware when keys are present (safe for deployments
+// that haven't configured Clerk yet).
+if (process.env.CLERK_PUBLISHABLE_KEY || process.env.CLERK_SECRET_KEY) {
+  app.use(clerkMiddleware());
+}
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
