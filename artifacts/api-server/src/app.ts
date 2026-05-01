@@ -1,7 +1,9 @@
+import path from "path";
 import express, { type Express } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
 import { clerkMiddleware } from "@clerk/express";
+import { createProxyMiddleware } from "http-proxy-middleware";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import {
@@ -38,5 +40,37 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);
+
+if (process.env.NODE_ENV === "production") {
+  const frontendDir = path.join(
+    process.cwd(),
+    "artifacts/canary-rentals/dist/public",
+  );
+  app.use(express.static(frontendDir));
+  app.get("*", (_req, res) => {
+    res.sendFile(path.join(frontendDir, "index.html"));
+  });
+} else {
+  const mockupPort = process.env.MOCKUP_PORT ?? "8081";
+  const vitePort = process.env.VITE_PORT ?? "22860";
+
+  app.use(
+    "/__mockup",
+    createProxyMiddleware({
+      target: `http://localhost:${mockupPort}`,
+      changeOrigin: true,
+      ws: true,
+    }),
+  );
+
+  app.use(
+    "/",
+    createProxyMiddleware({
+      target: `http://localhost:${vitePort}`,
+      changeOrigin: true,
+      ws: true,
+    }),
+  );
+}
 
 export default app;

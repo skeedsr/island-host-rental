@@ -1,31 +1,23 @@
 kind = "web"
-previewPath = "/"
-title = "Canary Islands Rental Manager"
-version = "1.0.0"
-id = "artifacts/canary-rentals"
-router = "path"
+  previewPath = "/"
+  title = "Canary Islands Rental Manager"
+  version = "1.0.0"
+  id = "artifacts/canary-rentals"
+  router = "path"
 
-[[integratedSkills]]
-name = "react-vite"
-version = "1.0.0"
+  [[integratedSkills]]
+  name = "react-vite"
+  version = "1.0.0"
 
-[[services]]
-name = "web"
-paths = [ "/" ]
-localPort = 22860
+  [[services]]
+  name = "web"
+  paths = [ "/" ]
+  localPort = 22860
 
-[services.development]
-run = "pnpm --filter @workspace/canary-rentals run dev"
+  [services.development]
+  run = "pnpm --filter @workspace/canary-rentals run dev"
 
-[services.production]
-build = [ "pnpm", "--filter", "@workspace/canary-rentals", "run", "build" ]
-publicDir = "artifacts/canary-rentals/dist/public"
-serve = "static"
-
-[[services.production.rewrites]]
-from = "/*"
-to = "/index.html"
-
-[services.env]
-PORT = "22860"
-BASE_PATH = "/"
+  [services.env]
+  PORT = "22860"
+  BASE_PATH = "/"
+  
