@@ -3,20 +3,28 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Canary Islands Vacation Rental Management API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: properties
+    description: Property management
+  - name: bookings
+    description: Booking management
+  - name: ical
+    description: iCal synchronization
+  - name: dashboard
+    description: Dashboard summary data
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +32,295 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /properties:
+    get:
+      operationId: listProperties
+      tags: [properties]
+      summary: List all properties
+      responses:
+        "200":
+          description: List of properties
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Property"
+    post:
+      operationId: createProperty
+      tags: [properties]
+      summary: Create a property
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePropertyBody"
+      responses:
+        "201":
+          description: Property created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Property"
+
+  /properties/{id}:
+    get:
+      operationId: getProperty
+      tags: [properties]
+      summary: Get a property by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Property
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Property"
+        "404":
+          description: Not found
+    put:
+      operationId: updateProperty
+      tags: [properties]
+      summary: Update a property
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePropertyBody"
+      responses:
+        "200":
+          description: Property updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Property"
+    delete:
+      operationId: deleteProperty
+      tags: [properties]
+      summary: Delete a property
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /properties/{id}/sync:
+    post:
+      operationId: syncPropertyIcal
+      tags: [ical]
+      summary: Trigger iCal sync for a property
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Sync result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncResult"
+
+  /properties/{id}/ical-export:
+    get:
+      operationId: exportPropertyIcal
+      tags: [ical]
+      summary: Export iCal feed for a property
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: iCal file
+          content:
+            text/calendar:
+              schema:
+                type: string
+
+  /bookings:
+    get:
+      operationId: listBookings
+      tags: [bookings]
+      summary: List bookings
+      parameters:
+        - name: propertyId
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of bookings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Booking"
+    post:
+      operationId: createBooking
+      tags: [bookings]
+      summary: Create a booking
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBookingBody"
+      responses:
+        "201":
+          description: Booking created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+
+  /bookings/{id}:
+    get:
+      operationId: getBooking
+      tags: [bookings]
+      summary: Get a booking by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Booking
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+        "404":
+          description: Not found
+    put:
+      operationId: updateBooking
+      tags: [bookings]
+      summary: Update a booking
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateBookingBody"
+      responses:
+        "200":
+          description: Updated booking
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+    delete:
+      operationId: deleteBooking
+      tags: [bookings]
+      summary: Delete a booking
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /dashboard/summary:
+    get:
+      operationId: getDashboardSummary
+      tags: [dashboard]
+      summary: Get dashboard summary stats
+      responses:
+        "200":
+          description: Dashboard summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+
+  /dashboard/upcoming:
+    get:
+      operationId: getUpcomingBookings
+      tags: [dashboard]
+      summary: Get upcoming bookings (next 30 days)
+      responses:
+        "200":
+          description: Upcoming bookings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BookingWithProperty"
+
+  /dashboard/occupancy:
+    get:
+      operationId: getOccupancyStats
+      tags: [dashboard]
+      summary: Get monthly occupancy stats
+      responses:
+        "200":
+          description: Occupancy stats
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OccupancyStat"
+
+  /dashboard/revenue:
+    get:
+      operationId: getRevenueStats
+      tags: [dashboard]
+      summary: Get revenue breakdown by source
+      responses:
+        "200":
+          description: Revenue stats
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RevenueStat"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +331,291 @@ components:
       required:
         - status
 
+    Property:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        location:
+          type: string
+        description:
+          type: string
+        vvLicense:
+          type: string
+        igicEnabled:
+          type: boolean
+        nightly_rate:
+          type: number
+        max_guests:
+          type: integer
+        icalImportUrls:
+          type: array
+          items:
+            type: string
+        icalExportToken:
+          type: string
+        lastSyncAt:
+          type: string
+          nullable: true
+        syncStatus:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - name
+        - location
+        - vvLicense
+        - igicEnabled
+        - nightly_rate
+        - max_guests
+        - icalImportUrls
+        - icalExportToken
+        - createdAt
+        - updatedAt
+
+    CreatePropertyBody:
+      type: object
+      properties:
+        name:
+          type: string
+        location:
+          type: string
+        description:
+          type: string
+        vvLicense:
+          type: string
+        igicEnabled:
+          type: boolean
+        nightly_rate:
+          type: number
+        max_guests:
+          type: integer
+        icalImportUrls:
+          type: array
+          items:
+            type: string
+      required:
+        - name
+        - location
+        - vvLicense
+        - igicEnabled
+        - nightly_rate
+        - max_guests
+
+    Booking:
+      type: object
+      properties:
+        id:
+          type: integer
+        propertyId:
+          type: integer
+        guestName:
+          type: string
+        guestEmail:
+          type: string
+        guestPhone:
+          type: string
+          nullable: true
+        startDate:
+          type: string
+        endDate:
+          type: string
+        source:
+          type: string
+        status:
+          type: string
+        totalPrice:
+          type: number
+          nullable: true
+        igicAmount:
+          type: number
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        externalUid:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - propertyId
+        - guestName
+        - guestEmail
+        - startDate
+        - endDate
+        - source
+        - status
+        - createdAt
+        - updatedAt
+
+    CreateBookingBody:
+      type: object
+      properties:
+        propertyId:
+          type: integer
+        guestName:
+          type: string
+        guestEmail:
+          type: string
+        guestPhone:
+          type: string
+        startDate:
+          type: string
+        endDate:
+          type: string
+        source:
+          type: string
+        status:
+          type: string
+        totalPrice:
+          type: number
+        notes:
+          type: string
+      required:
+        - propertyId
+        - guestName
+        - guestEmail
+        - startDate
+        - endDate
+        - source
+        - status
+
+    UpdateBookingBody:
+      type: object
+      properties:
+        guestName:
+          type: string
+        guestEmail:
+          type: string
+        guestPhone:
+          type: string
+        startDate:
+          type: string
+        endDate:
+          type: string
+        source:
+          type: string
+        status:
+          type: string
+        totalPrice:
+          type: number
+        notes:
+          type: string
+
+    SyncResult:
+      type: object
+      properties:
+        synced:
+          type: integer
+        conflicts:
+          type: integer
+        errors:
+          type: array
+          items:
+            type: string
+        lastSyncAt:
+          type: string
+      required:
+        - synced
+        - conflicts
+        - errors
+        - lastSyncAt
+
+    DashboardSummary:
+      type: object
+      properties:
+        totalProperties:
+          type: integer
+        totalBookings:
+          type: integer
+        activeBookings:
+          type: integer
+        occupancyRate:
+          type: number
+        revenueThisMonth:
+          type: number
+        pendingCheckins:
+          type: integer
+      required:
+        - totalProperties
+        - totalBookings
+        - activeBookings
+        - occupancyRate
+        - revenueThisMonth
+        - pendingCheckins
+
+    BookingWithProperty:
+      type: object
+      properties:
+        id:
+          type: integer
+        propertyId:
+          type: integer
+        propertyName:
+          type: string
+        propertyLocation:
+          type: string
+        guestName:
+          type: string
+        guestEmail:
+          type: string
+        startDate:
+          type: string
+        endDate:
+          type: string
+        source:
+          type: string
+        status:
+          type: string
+        totalPrice:
+          type: number
+          nullable: true
+      required:
+        - id
+        - propertyId
+        - propertyName
+        - propertyLocation
+        - guestName
+        - guestEmail
+        - startDate
+        - endDate
+        - source
+        - status
+
+    OccupancyStat:
+      type: object
+      properties:
+        month:
+          type: string
+        occupancyRate:
+          type: number
+        bookings:
+          type: integer
+      required:
+        - month
+        - occupancyRate
+        - bookings
+
+    RevenueStat:
+      type: object
+      properties:
+        source:
+          type: string
+        revenue:
+          type: number
+        bookings:
+          type: integer
+      required:
+        - source
+        - revenue
+        - bookings
