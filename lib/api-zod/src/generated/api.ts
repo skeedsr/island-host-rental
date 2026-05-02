@@ -26,6 +26,7 @@ export const ListPropertiesResponseItem = zod.object({
   igicEnabled: zod.boolean(),
   nightly_rate: zod.number(),
   max_guests: zod.number(),
+  photos: zod.array(zod.string()),
   icalImportUrls: zod.array(zod.string()),
   icalExportToken: zod.string(),
   lastSyncAt: zod.string().nullish(),
@@ -46,6 +47,7 @@ export const CreatePropertyBody = zod.object({
   igicEnabled: zod.boolean(),
   nightly_rate: zod.number(),
   max_guests: zod.number(),
+  photos: zod.array(zod.string()).optional(),
   icalImportUrls: zod.array(zod.string()).optional(),
 });
 
@@ -65,6 +67,7 @@ export const GetPropertyResponse = zod.object({
   igicEnabled: zod.boolean(),
   nightly_rate: zod.number(),
   max_guests: zod.number(),
+  photos: zod.array(zod.string()),
   icalImportUrls: zod.array(zod.string()),
   icalExportToken: zod.string(),
   lastSyncAt: zod.string().nullish(),
@@ -88,6 +91,7 @@ export const UpdatePropertyBody = zod.object({
   igicEnabled: zod.boolean(),
   nightly_rate: zod.number(),
   max_guests: zod.number(),
+  photos: zod.array(zod.string()).optional(),
   icalImportUrls: zod.array(zod.string()).optional(),
 });
 
@@ -100,6 +104,7 @@ export const UpdatePropertyResponse = zod.object({
   igicEnabled: zod.boolean(),
   nightly_rate: zod.number(),
   max_guests: zod.number(),
+  photos: zod.array(zod.string()),
   icalImportUrls: zod.array(zod.string()),
   icalExportToken: zod.string(),
   lastSyncAt: zod.string().nullish(),

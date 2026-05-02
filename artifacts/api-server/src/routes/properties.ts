@@ -21,6 +21,7 @@ router.get("/properties", async (req, res) => {
   const properties = await db.select().from(propertiesTable).orderBy(propertiesTable.createdAt);
   const mapped = properties.map((p) => ({
     ...p,
+    photos: p.photos ?? [],
     icalImportUrls: p.icalImportUrls ?? [],
     nightly_rate: p.nightlyRate,
     max_guests: p.maxGuests,
@@ -48,6 +49,7 @@ router.post("/properties", requireAdmin, async (req, res) => {
       igicEnabled: data.igicEnabled,
       nightlyRate: data.nightly_rate ?? 0,
       maxGuests: data.max_guests ?? 1,
+      photos: data.photos ?? [],
       icalImportUrls: data.icalImportUrls ?? [],
       icalExportToken: token,
     })
@@ -79,6 +81,7 @@ router.get("/properties/:id", async (req, res) => {
 
   res.json({
     ...property,
+    photos: property.photos ?? [],
     nightly_rate: property.nightlyRate,
     max_guests: property.maxGuests,
     icalImportUrls: property.icalImportUrls ?? [],
@@ -108,6 +111,7 @@ router.put("/properties/:id", requireAdmin, async (req, res) => {
   if (data.igicEnabled !== undefined) updateData.igicEnabled = data.igicEnabled;
   if (data.nightly_rate !== undefined) updateData.nightlyRate = data.nightly_rate;
   if (data.max_guests !== undefined) updateData.maxGuests = data.max_guests;
+  if (data.photos !== undefined) updateData.photos = data.photos;
   if (data.icalImportUrls !== undefined) updateData.icalImportUrls = data.icalImportUrls;
 
   const [updated] = await db

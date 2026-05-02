@@ -11,6 +11,7 @@ export const propertiesTable = pgTable("properties", {
   igicEnabled: boolean("igic_enabled").notNull().default(false),
   nightlyRate: real("nightly_rate").notNull().default(0),
   maxGuests: integer("max_guests").notNull().default(1),
+  photos: text("photos").array().notNull().default([]),
   icalImportUrls: text("ical_import_urls").array().notNull().default([]),
   icalExportToken: text("ical_export_token").notNull(),
   lastSyncAt: timestamp("last_sync_at"),

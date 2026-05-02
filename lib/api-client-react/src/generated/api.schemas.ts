@@ -18,6 +18,7 @@ export interface Property {
   igicEnabled: boolean;
   nightly_rate: number;
   max_guests: number;
+  photos: string[];
   icalImportUrls: string[];
   icalExportToken: string;
   lastSyncAt?: string | null;
@@ -34,6 +35,7 @@ export interface CreatePropertyBody {
   igicEnabled: boolean;
   nightly_rate: number;
   max_guests: number;
+  photos?: string[];
   icalImportUrls?: string[];
 }
 

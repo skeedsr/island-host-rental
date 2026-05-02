@@ -22,25 +22,14 @@ Full-stack vacation rental management web app built specifically for the Canary 
 
 ## Authentication
 
-Clerk-based auth with role-based access control:
-- **Admin** (`publicMetadata.role = "admin"`) — full dashboard access, user management
-- **User** (`publicMetadata.role = "user"`) — can browse public pages and submit bookings
-
-### Setup (required before admin dashboard is accessible)
-1. Go to [clerk.com](https://clerk.com), create an app
-2. In Replit Secrets, set:
-   - `VITE_CLERK_PUBLISHABLE_KEY` — from Clerk dashboard (starts with `pk_`)
-   - `CLERK_SECRET_KEY` — from Clerk dashboard (starts with `sk_`)
-   - `CLERK_PUBLISHABLE_KEY` — same value as `VITE_CLERK_PUBLISHABLE_KEY` (for backend proxy)
-3. Make the first user an admin: use Clerk dashboard → Users → Metadata → set `{ "role": "admin" }`
-   Or use the `/api/admin/users/:id/role` endpoint once you have one admin
+Session-based admin auth (express-session):
+- **Admin**: single superuser; login with username `admin` + `ADMIN_PASSWORD` secret via POST `/api/auth/login`
+- **Customers**: register/login via `/api/customer/register` and `/api/customer/login`; public booking flow
 
 ### Key files
-- `artifacts/api-server/src/middlewares/auth.ts` — `requireUser`, `requireAdmin` middleware
-- `artifacts/api-server/src/routes/admin.ts` — `GET/PATCH /api/admin/users` endpoints
-- `artifacts/canary-rentals/src/components/AdminGuard.tsx` — wraps all admin routes
-- `artifacts/canary-rentals/src/pages/Users.tsx` — user role management UI
-- `lib/api-client-react/src/custom-fetch.ts` — `setAuthTokenGetter` injects Bearer tokens
+- `artifacts/api-server/src/middlewares/auth.ts` — `requireAdmin`, `requireCustomer` middleware
+- `artifacts/canary-rentals/src/components/AdminGuard.tsx` — redirects to login if not authenticated
+- Secrets required: `ADMIN_PASSWORD`, `SESSION_SECRET`
 
 ## Customer-Facing Routes (public, no login required)
 
@@ -49,7 +38,8 @@ Clerk-based auth with role-based access control:
 
 ## Key Features
 
-- **Property Management**: Full CRUD for properties with VV license number (Vivienda Vacacional), IGIC toggle (7% Canary Islands tax), nightly rate and max guests
+- **Property Management**: Full CRUD for properties with VV license number (Vivienda Vacacional), IGIC toggle (7% Canary Islands tax), nightly rate, max guests, and photo gallery (URL-based)
+- **Property Forms**: Shared `PropertyFormPage` for creating (`/properties/new`) and editing (`/properties/:id/edit`) — includes photo URL management and iCal URL management inline
 - **Bidirectional iCal Sync**: 
   - Inbound: fetches and parses external .ics feeds (Airbnb, Booking.com, VRBO) with conflict detection
   - Outbound: unique secret export token per property for external platform consumption
@@ -60,7 +50,7 @@ Clerk-based auth with role-based access control:
 
 ## DB Schema
 
-- `properties` — id, name, location, description, vv_license, igic_enabled, nightly_rate, max_guests, ical_import_urls[], ical_export_token, last_sync_at, sync_status
+- `properties` — id, name, location, description, vv_license, igic_enabled, nightly_rate, max_guests, photos[] (text array of URLs), ical_import_urls[], ical_export_token, last_sync_at, sync_status
 - `bookings` — id, property_id, guest_name, guest_email, guest_phone, start_date, end_date, source, status, total_price, igic_amount, notes, external_uid
 
 ## Key Commands
@@ -106,7 +96,8 @@ artifacts/
       pages/
         Dashboard.tsx    — overview stats + charts
         Properties.tsx   — property list/management
-        PropertyDetail.tsx — property detail + calendar + iCal config
+        PropertyDetail.tsx — property detail + photo gallery tab + calendar + iCal config
+        PropertyFormPage.tsx — shared create/edit form (photos, iCal URLs, all fields)
         Bookings.tsx     — booking list with filters + add dialog
         BookingDetail.tsx — booking detail + edit + IGIC display
         CalendarPage.tsx — multi-property monthly calendar

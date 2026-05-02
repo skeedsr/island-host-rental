@@ -350,6 +350,10 @@ components:
           type: number
         max_guests:
           type: integer
+        photos:
+          type: array
+          items:
+            type: string
         icalImportUrls:
           type: array
           items:
@@ -374,6 +378,7 @@ components:
         - igicEnabled
         - nightly_rate
         - max_guests
+        - photos
         - icalImportUrls
         - icalExportToken
         - createdAt
@@ -396,6 +401,10 @@ components:
           type: number
         max_guests:
           type: integer
+        photos:
+          type: array
+          items:
+            type: string
         icalImportUrls:
           type: array
           items:

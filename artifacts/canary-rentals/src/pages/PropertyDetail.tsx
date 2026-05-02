@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useParams, Link, useLocation } from "wouter";
 import { 
   useGetProperty, 
@@ -14,7 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Building, MapPin, Copy, RefreshCw, Euro, Users, ArrowLeft, Calendar as CalendarIcon, CheckCircle2, XCircle } from "lucide-react";
+import { Building, MapPin, Copy, RefreshCw, Euro, Users, ArrowLeft, Calendar as CalendarIcon, CheckCircle2, XCircle, ImageIcon, ChevronLeft, ChevronRight } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { toast } from "sonner";
 import { Calendar } from "@/components/ui/calendar";
@@ -24,6 +25,7 @@ export default function PropertyDetail() {
   const propertyId = parseInt(id || "0", 10);
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
+  const [photoIdx, setPhotoIdx] = useState(0);
 
   const { data: property, isLoading: loadingProperty } = useGetProperty(propertyId, {
     query: { enabled: !!propertyId, queryKey: getGetPropertyQueryKey(propertyId) }
@@ -125,6 +127,13 @@ export default function PropertyDetail() {
           <Tabs defaultValue="overview">
             <TabsList className="w-full justify-start rounded-none border-b bg-transparent p-0">
               <TabsTrigger value="overview" className="rounded-none border-b-2 border-transparent px-4 py-2 font-medium data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none">Overview</TabsTrigger>
+              <TabsTrigger value="photos" className="rounded-none border-b-2 border-transparent px-4 py-2 font-medium data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none flex items-center gap-1.5">
+                <ImageIcon className="h-3.5 w-3.5" />
+                Foto
+                {property.photos && property.photos.length > 0 && (
+                  <span className="ml-1 text-xs bg-primary/10 text-primary rounded-full px-1.5 py-0.5 font-semibold">{property.photos.length}</span>
+                )}
+              </TabsTrigger>
               <TabsTrigger value="calendar" className="rounded-none border-b-2 border-transparent px-4 py-2 font-medium data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none">Calendar</TabsTrigger>
               <TabsTrigger value="sync" className="rounded-none border-b-2 border-transparent px-4 py-2 font-medium data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none">iCal Sync</TabsTrigger>
             </TabsList>
@@ -219,6 +228,90 @@ export default function PropertyDetail() {
               </Card>
             </TabsContent>
             
+            <TabsContent value="photos" className="mt-6">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                  <div>
+                    <CardTitle>Foto della proprietà</CardTitle>
+                    <CardDescription>
+                      {property.photos?.length
+                        ? `${property.photos.length} foto caricate`
+                        : "Nessuna foto aggiunta"}
+                    </CardDescription>
+                  </div>
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href={`/properties/${property.id}/edit`}>Gestisci foto</Link>
+                  </Button>
+                </CardHeader>
+                <CardContent>
+                  {!property.photos || property.photos.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground border-2 border-dashed rounded-lg">
+                      <ImageIcon className="h-10 w-10 mb-3 opacity-30" />
+                      <p className="font-medium">Nessuna foto</p>
+                      <p className="text-sm mt-1">Aggiungi foto modificando la proprietà.</p>
+                      <Button variant="link" asChild className="mt-2">
+                        <Link href={`/properties/${property.id}/edit`}>Aggiungi foto →</Link>
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {/* Main photo viewer */}
+                      <div className="relative rounded-xl overflow-hidden bg-muted aspect-video">
+                        <img
+                          src={property.photos[photoIdx]}
+                          alt={`Foto ${photoIdx + 1}`}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src =
+                              "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='225' viewBox='0 0 400 225'%3E%3Crect width='400' height='225' fill='%23f1f5f9'/%3E%3Ctext x='200' y='120' text-anchor='middle' fill='%2394a3b8' font-size='14'%3EImmagine non disponibile%3C/text%3E%3C/svg%3E";
+                          }}
+                        />
+                        {property.photos.length > 1 && (
+                          <>
+                            <button
+                              onClick={() => setPhotoIdx((i) => (i - 1 + property.photos.length) % property.photos.length)}
+                              className="absolute left-3 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/40 hover:bg-black/60 text-white transition-colors"
+                            >
+                              <ChevronLeft className="h-5 w-5" />
+                            </button>
+                            <button
+                              onClick={() => setPhotoIdx((i) => (i + 1) % property.photos.length)}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/40 hover:bg-black/60 text-white transition-colors"
+                            >
+                              <ChevronRight className="h-5 w-5" />
+                            </button>
+                            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-black/50 text-white text-xs px-2.5 py-1 rounded-full">
+                              {photoIdx + 1} / {property.photos.length}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                      {/* Thumbnails */}
+                      {property.photos.length > 1 && (
+                        <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                          {property.photos.map((url, idx) => (
+                            <button
+                              key={idx}
+                              onClick={() => setPhotoIdx(idx)}
+                              className={`aspect-video rounded-md overflow-hidden border-2 transition-all ${
+                                idx === photoIdx ? "border-primary shadow-md scale-105" : "border-transparent opacity-60 hover:opacity-90"
+                              }`}
+                            >
+                              <img
+                                src={url}
+                                alt={`Thumb ${idx + 1}`}
+                                className="w-full h-full object-cover"
+                              />
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
             <TabsContent value="calendar" className="mt-6">
               <Card>
                 <CardContent className="p-6">
