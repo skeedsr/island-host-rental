@@ -13,10 +13,10 @@ const router: IRouter = Router();
 router.use(healthRouter);
 router.use(authRouter);
 router.use(customerAuthRouter);
+router.use(storageRouter);
 router.use(propertiesRouter);
 router.use(bookingsRouter);
 router.use(dashboardRouter);
 router.use(adminRouter);
-router.use(storageRouter);
 
 export default router;
