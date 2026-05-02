@@ -36,6 +36,8 @@ import {
   Wind,
   ShieldCheck,
   CalendarDays,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import {
   format,
@@ -190,6 +192,7 @@ export default function PublicProperty() {
   const [confirmed, setConfirmed] = useState(false);
   const [confirmedRef, setConfirmedRef] = useState<string>("");
   const [bookingError, setBookingError] = useState<string | null>(null);
+  const [heroIdx, setHeroIdx] = useState(0);
 
   const handleBookClick = () => {
     if (!isLoggedIn) {
@@ -318,22 +321,76 @@ export default function PublicProperty() {
           Back to properties
         </Link>
 
-        <div className="relative rounded-2xl overflow-hidden h-64 sm:h-80 mb-8 shadow-lg">
-          <img
-            src={getPropertyImage(property.location)}
-            alt={property.name}
-            className="w-full h-full object-cover"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
-          {property.vvLicense && (
-            <div className="absolute top-4 left-4">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/90 text-foreground shadow">
-                <ShieldCheck className="h-3.5 w-3.5 text-green-600" />
-                VV Licensed · {property.vvLicense}
-              </span>
+        {/* Hero photo gallery */}
+        {(() => {
+          const photos = property.photos && property.photos.length > 0
+            ? property.photos
+            : [getPropertyImage(property.location)];
+          const idx = Math.min(heroIdx, photos.length - 1);
+          return (
+            <div className="mb-8">
+              <div className="relative rounded-2xl overflow-hidden h-64 sm:h-80 shadow-lg">
+                <img
+                  key={idx}
+                  src={photos[idx]}
+                  alt={`${property.name} — foto ${idx + 1}`}
+                  className="w-full h-full object-cover transition-opacity duration-300"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
+                {property.vvLicense && (
+                  <div className="absolute top-4 left-4">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/90 text-foreground shadow">
+                      <ShieldCheck className="h-3.5 w-3.5 text-green-600" />
+                      VV Licensed · {property.vvLicense}
+                    </span>
+                  </div>
+                )}
+                {photos.length > 1 && (
+                  <>
+                    <button
+                      onClick={() => setHeroIdx((i) => (i - 1 + photos.length) % photos.length)}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/40 hover:bg-black/60 text-white transition-colors"
+                      aria-label="Foto precedente"
+                    >
+                      <ChevronLeft className="h-5 w-5" />
+                    </button>
+                    <button
+                      onClick={() => setHeroIdx((i) => (i + 1) % photos.length)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/40 hover:bg-black/60 text-white transition-colors"
+                      aria-label="Foto successiva"
+                    >
+                      <ChevronRight className="h-5 w-5" />
+                    </button>
+                    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
+                      {photos.map((_, i) => (
+                        <button
+                          key={i}
+                          onClick={() => setHeroIdx(i)}
+                          className={`rounded-full transition-all ${i === idx ? "w-5 h-2 bg-white" : "w-2 h-2 bg-white/50 hover:bg-white/80"}`}
+                          aria-label={`Vai alla foto ${i + 1}`}
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+              {/* Thumbnail strip */}
+              {photos.length > 1 && (
+                <div className="flex gap-2 mt-2 overflow-x-auto pb-1">
+                  {photos.map((url, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setHeroIdx(i)}
+                      className={`flex-shrink-0 w-16 h-12 rounded-lg overflow-hidden border-2 transition-all ${i === idx ? "border-primary scale-105" : "border-transparent opacity-60 hover:opacity-90"}`}
+                    >
+                      <img src={url} alt="" className="w-full h-full object-cover" />
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          );
+        })()}
 
         <div className="grid md:grid-cols-3 gap-8">
           <div className="md:col-span-2 space-y-7">

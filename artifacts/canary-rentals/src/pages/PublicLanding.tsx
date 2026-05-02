@@ -129,7 +129,7 @@ export default function PublicLanding() {
               >
                   <div className="relative h-52 overflow-hidden">
                     <img
-                      src={getPropertyImage(property.location)}
+                      src={property.photos && property.photos.length > 0 ? property.photos[0] : getPropertyImage(property.location)}
                       alt={property.name}
                       className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-500"
                       loading="lazy"
