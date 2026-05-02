@@ -1,5 +1,8 @@
 import { useState } from "react";
 import { useParams, Link, useLocation } from "wouter";
+import { useCustomerAuth } from "@/hooks/use-customer-auth";
+import { CustomerAuthModal } from "@/components/CustomerAuthModal";
+import type { CustomerUser } from "@/hooks/use-customer-auth";
 import {
   useGetProperty,
   useListBookings,
@@ -181,9 +184,26 @@ export default function PublicProperty() {
   const propertyId = parseInt(id || "0", 10);
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
+  const { customer, isLoggedIn } = useCustomerAuth();
+  const [showAuthModal, setShowAuthModal] = useState(false);
   const [showBookingForm, setShowBookingForm] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [confirmedRef, setConfirmedRef] = useState<string>("");
+
+  const handleBookClick = () => {
+    if (!isLoggedIn) {
+      setShowAuthModal(true);
+    } else {
+      setShowBookingForm(true);
+    }
+  };
+
+  const handleAuthSuccess = (user: CustomerUser) => {
+    form.setValue("firstName", user.firstName);
+    form.setValue("lastName", user.lastName);
+    form.setValue("email", user.email);
+    setShowBookingForm(true);
+  };
 
   const { data: property, isLoading: loadingProp } = useGetProperty(propertyId, {
     query: { enabled: !!propertyId, queryKey: getGetPropertyQueryKey(propertyId) },
@@ -445,12 +465,16 @@ export default function PublicProperty() {
 
               <Button
                 className="w-full h-11 text-base font-bold"
-                onClick={() => setShowBookingForm(true)}
+                onClick={handleBookClick}
                 disabled={!watchStart || !watchEnd || nights <= 0}
                 data-testid="button-book-now"
               >
                 <CalendarDays className="h-4 w-4 mr-2" />
-                {!watchStart || !watchEnd ? "Select dates to book" : "Request to Book"}
+                {!watchStart || !watchEnd
+                  ? "Seleziona le date"
+                  : isLoggedIn
+                  ? "Prenota ora"
+                  : "Accedi per prenotare"}
               </Button>
 
               <div className="space-y-2">
@@ -652,6 +676,12 @@ export default function PublicProperty() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <CustomerAuthModal
+        open={showAuthModal}
+        onOpenChange={setShowAuthModal}
+        onSuccess={handleAuthSuccess}
+      />
     </PublicLayout>
   );
 }
