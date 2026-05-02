@@ -1,9 +1,11 @@
-import { Home, Building, Calendar, ListTodo, ExternalLink, Users } from "lucide-react";
+import { Home, Building, Calendar, ListTodo, ExternalLink, Users, LogOut } from "lucide-react";
 import { Link, useLocation } from "wouter";
+import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 
 export function Sidebar() {
   const [location] = useLocation();
+  const { logout } = useAuth();
 
   const links = [
     { href: "/", label: "Dashboard", icon: Home },
@@ -48,7 +50,7 @@ export function Sidebar() {
         })}
       </nav>
 
-      <div className="border-t p-3">
+      <div className="border-t p-3 space-y-1">
         <a
           href="/stay"
           target="_blank"
@@ -58,6 +60,14 @@ export function Sidebar() {
           <ExternalLink className="h-4 w-4" />
           Customer View
         </a>
+        <button
+          onClick={logout}
+          className="w-full flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground text-left"
+          data-testid="button-logout"
+        >
+          <LogOut className="h-4 w-4" />
+          Logout
+        </button>
       </div>
     </aside>
   );
