@@ -11,7 +11,7 @@ kind = "web"
 
   [[services]]
   name = "web"
-  paths = [ "/" ]
+  paths = [ "/", "/api", "/__clerk" ]
   localPort = 22860
 
   [services.development]
@@ -27,4 +27,3 @@ kind = "web"
 
   [services.production.health.startup]
   path = "/api/healthz"
-  
