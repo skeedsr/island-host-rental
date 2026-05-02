@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, bookingsTable, propertiesTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, lt, gt, ne } from "drizzle-orm";
 import {
   CreateBookingBody,
   UpdateBookingBody,
@@ -67,6 +67,26 @@ router.post("/bookings", requireUser, async (req, res) => {
 
   if (!property) {
     res.status(404).json({ error: "Property not found" });
+    return;
+  }
+
+  // Check for overlapping bookings (exclude cancelled)
+  const overlapping = await db
+    .select({ id: bookingsTable.id })
+    .from(bookingsTable)
+    .where(
+      and(
+        eq(bookingsTable.propertyId, data.propertyId),
+        ne(bookingsTable.status, "cancelled"),
+        lt(bookingsTable.startDate, data.endDate),
+        gt(bookingsTable.endDate, data.startDate),
+      ),
+    );
+
+  if (overlapping.length > 0) {
+    res.status(409).json({
+      error: "Le date selezionate non sono disponibili. Scegli date diverse.",
+    });
     return;
   }
 

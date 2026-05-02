@@ -5,7 +5,7 @@ kind = "design"
   id = "XegfDyZt7HqfW2Bb8Ghoy"
 
   [[services]]
-  localPort = 22860
+  localPort = 8081
   name = "Component Preview Server"
   paths = ["/__mockup"]
 

@@ -5,7 +5,7 @@ kind = "api"
   id = "3B4_FFSkEVBkAeYMFRJ2e"
 
   [[services]]
-  localPort = 22860
+  localPort = 8080
   name = "API Server"
   paths = ["/api", "/__clerk"]
 

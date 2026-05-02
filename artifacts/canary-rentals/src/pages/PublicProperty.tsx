@@ -189,6 +189,7 @@ export default function PublicProperty() {
   const [showBookingForm, setShowBookingForm] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [confirmedRef, setConfirmedRef] = useState<string>("");
+  const [bookingError, setBookingError] = useState<string | null>(null);
 
   const handleBookClick = () => {
     if (!isLoggedIn) {
@@ -245,6 +246,7 @@ export default function PublicProperty() {
     .map((b) => ({ start: b.startDate, end: b.endDate }));
 
   const onSubmit = async (values: BookingFormValues) => {
+    setBookingError(null);
     try {
       const result = await createBooking.mutateAsync({
         data: {
@@ -265,8 +267,13 @@ export default function PublicProperty() {
       setConfirmed(true);
       form.reset();
       setShowBookingForm(false);
-    } catch {
-      toast.error("Failed to submit booking. Please try again.");
+    } catch (err: unknown) {
+      const apiErr = err as { data?: { error?: string }; status?: number };
+      if (apiErr?.status === 409 && apiErr?.data?.error) {
+        setBookingError(apiErr.data.error);
+      } else {
+        toast.error("Invio non riuscito. Riprova.");
+      }
     }
   };
 
@@ -620,20 +627,40 @@ export default function PublicProperty() {
                 </div>
               )}
 
+              {bookingError && (
+                <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 flex items-start gap-2 text-sm text-destructive">
+                  <span className="mt-0.5">⚠️</span>
+                  <div>
+                    <p className="font-semibold">Date non disponibili</p>
+                    <p className="mt-0.5">{bookingError}</p>
+                    <button
+                      type="button"
+                      className="mt-2 underline font-medium"
+                      onClick={() => {
+                        setBookingError(null);
+                        setShowBookingForm(false);
+                      }}
+                    >
+                      Scegli altre date →
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <DialogFooter className="pt-2">
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setShowBookingForm(false)}
+                  onClick={() => { setBookingError(null); setShowBookingForm(false); }}
                 >
-                  Cancel
+                  Annulla
                 </Button>
                 <Button
                   type="submit"
                   disabled={createBooking.isPending}
                   data-testid="button-submit-booking"
                 >
-                  {createBooking.isPending ? "Submitting..." : "Confirm Booking Request"}
+                  {createBooking.isPending ? "Invio in corso..." : "Conferma richiesta"}
                 </Button>
               </DialogFooter>
             </form>
