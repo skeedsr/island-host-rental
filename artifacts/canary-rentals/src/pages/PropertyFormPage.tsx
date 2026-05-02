@@ -17,7 +17,7 @@ import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, Plus, Trash2, ImagePlus, GripVertical, Upload, X } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, ImagePlus, GripVertical, Upload, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { usePhotoUpload } from "@/hooks/usePhotoUpload";
 
@@ -98,6 +98,14 @@ export default function PropertyFormPage() {
 
   const removePhoto = (idx: number) =>
     set("photos", form.photos.filter((_, i) => i !== idx));
+
+  const movePhoto = (idx: number, dir: -1 | 1) => {
+    const next = idx + dir;
+    if (next < 0 || next >= form.photos.length) return;
+    const arr = [...form.photos];
+    [arr[idx], arr[next]] = [arr[next], arr[idx]];
+    set("photos", arr);
+  };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
@@ -346,31 +354,56 @@ export default function PropertyFormPage() {
             {form.photos.length > 0 && (
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {form.photos.map((url, idx) => (
-                  <div key={idx} className="relative group rounded-lg overflow-hidden border bg-muted aspect-video">
+                  <div key={url + idx} className="relative rounded-lg overflow-hidden border bg-muted aspect-video flex flex-col">
                     <img
                       src={url}
                       alt={`Foto ${idx + 1}`}
-                      className="w-full h-full object-cover"
+                      className="w-full flex-1 object-cover min-h-0"
                       onError={(e) => {
                         (e.target as HTMLImageElement).src =
-                          "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='60' viewBox='0 0 100 60'%3E%3Crect width='100' height='60' fill='%23f1f5f9'/%3E%3Ctext x='50' y='35' text-anchor='middle' fill='%2394a3b8' font-size='10'%3EImmagine non valida%3C/text%3E%3C/svg%3E";
+                          "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='60' viewBox='0 0 100 60'%3E%3Crect width='100' height='60' fill='%23f1f5f9'/%3E%3Ctext x='50' y='35' text-anchor='middle' fill='%2394a3b8' font-size='10'%3EErrore%3C/text%3E%3C/svg%3E";
                       }}
                     />
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
+                    {/* Cover badge */}
+                    {idx === 0 && (
+                      <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-primary text-white shadow">
+                        Copertina
+                      </span>
+                    )}
+                    {/* Controls bar */}
+                    <div className="flex items-center justify-between bg-background/95 border-t px-1 py-0.5 gap-0.5">
+                      <div className="flex gap-0.5">
+                        <button
+                          type="button"
+                          disabled={idx === 0}
+                          onClick={() => movePhoto(idx, -1)}
+                          className="p-1 rounded hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed"
+                          title="Sposta a sinistra"
+                        >
+                          <ChevronLeft className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={idx === form.photos.length - 1}
+                          onClick={() => movePhoto(idx, 1)}
+                          className="p-1 rounded hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed"
+                          title="Sposta a destra"
+                        >
+                          <ChevronRight className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                      <span className="text-[10px] text-muted-foreground font-medium flex-1 text-center">
+                        {idx + 1}/{form.photos.length}
+                      </span>
                       <button
                         type="button"
                         onClick={() => removePhoto(idx)}
-                        className="p-1.5 rounded-full bg-white/90 hover:bg-white"
+                        className="p-1 rounded hover:bg-destructive/10 text-destructive"
+                        title="Elimina foto"
                       >
-                        <X className="h-4 w-4 text-destructive" />
+                        <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     </div>
-                    <Badge
-                      variant="secondary"
-                      className="absolute bottom-1 left-1 text-[10px] px-1.5 py-0"
-                    >
-                      {idx + 1}
-                    </Badge>
                   </div>
                 ))}
               </div>
