@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams, Link, useLocation } from "wouter";
 import { useCustomerAuth } from "@/hooks/use-customer-auth";
 import { CustomerAuthModal } from "@/components/CustomerAuthModal";
@@ -38,6 +38,8 @@ import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
+  X,
+  Expand,
 } from "lucide-react";
 import {
   format,
@@ -193,6 +195,17 @@ export default function PublicProperty() {
   const [confirmedRef, setConfirmedRef] = useState<string>("");
   const [bookingError, setBookingError] = useState<string | null>(null);
   const [heroIdx, setHeroIdx] = useState(0);
+  const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
+
+  const openLightbox = useCallback((idx: number) => {
+    setLightboxIdx(idx);
+    document.body.style.overflow = "hidden";
+  }, []);
+
+  const closeLightbox = useCallback(() => {
+    setLightboxIdx(null);
+    document.body.style.overflow = "";
+  }, []);
 
   const handleBookClick = () => {
     if (!isLoggedIn) {
@@ -217,6 +230,23 @@ export default function PublicProperty() {
     { query: { enabled: !!propertyId, queryKey: getListBookingsQueryKey({ propertyId }) } }
   );
   const createBooking = useCreateBooking();
+
+  // Keyboard navigation for lightbox
+  useEffect(() => {
+    if (lightboxIdx === null) return;
+    const photos = property?.photos?.length ? property.photos : null;
+    if (!photos) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeLightbox();
+      if (e.key === "ArrowRight") setLightboxIdx((i) => i !== null ? (i + 1) % photos.length : i);
+      if (e.key === "ArrowLeft") setLightboxIdx((i) => i !== null ? (i - 1 + photos.length) % photos.length : i);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = "";
+    };
+  }, [lightboxIdx, property?.photos, closeLightbox]);
 
   const form = useForm<BookingFormValues>({
     resolver: zodResolver(bookingSchema),
@@ -329,14 +359,23 @@ export default function PublicProperty() {
           const idx = Math.min(heroIdx, photos.length - 1);
           return (
             <div className="mb-8">
-              <div className="relative rounded-2xl overflow-hidden h-64 sm:h-80 shadow-lg">
+              <div className="relative rounded-2xl overflow-hidden h-64 sm:h-80 shadow-lg group/hero">
                 <img
                   key={idx}
                   src={photos[idx]}
                   alt={`${property.name} — foto ${idx + 1}`}
-                  className="w-full h-full object-cover transition-opacity duration-300"
+                  className="w-full h-full object-cover transition-opacity duration-300 cursor-zoom-in"
+                  onClick={() => openLightbox(idx)}
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent pointer-events-none" />
+                {/* Expand hint */}
+                <button
+                  onClick={() => openLightbox(idx)}
+                  className="absolute top-3 right-3 p-2 rounded-full bg-black/40 hover:bg-black/60 text-white opacity-0 group-hover/hero:opacity-100 transition-all"
+                  aria-label="Visualizza a schermo intero"
+                >
+                  <Expand className="h-4 w-4" />
+                </button>
                 {property.vvLicense && (
                   <div className="absolute top-4 left-4">
                     <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/90 text-foreground shadow">
@@ -380,7 +419,7 @@ export default function PublicProperty() {
                   {photos.map((url, i) => (
                     <button
                       key={i}
-                      onClick={() => setHeroIdx(i)}
+                      onClick={() => openLightbox(i)}
                       className={`flex-shrink-0 w-16 h-12 rounded-lg overflow-hidden border-2 transition-all ${i === idx ? "border-primary scale-105" : "border-transparent opacity-60 hover:opacity-90"}`}
                     >
                       <img src={url} alt="" className="w-full h-full object-cover" />
@@ -766,6 +805,77 @@ export default function PublicProperty() {
         onOpenChange={setShowAuthModal}
         onSuccess={handleAuthSuccess}
       />
+
+      {/* Lightbox */}
+      {lightboxIdx !== null && property?.photos && property.photos.length > 0 && (() => {
+        const photos = property.photos;
+        const li = lightboxIdx;
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/95"
+            onClick={closeLightbox}
+          >
+            {/* Close */}
+            <button
+              onClick={closeLightbox}
+              className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/25 text-white transition-colors z-10"
+              aria-label="Chiudi"
+            >
+              <X className="h-6 w-6" />
+            </button>
+
+            {/* Counter */}
+            <span className="absolute top-5 left-1/2 -translate-x-1/2 text-white/70 text-sm font-medium z-10">
+              {li + 1} / {photos.length}
+            </span>
+
+            {/* Prev */}
+            {photos.length > 1 && (
+              <button
+                onClick={(e) => { e.stopPropagation(); setLightboxIdx((i) => i !== null ? (i - 1 + photos.length) % photos.length : i); }}
+                className="absolute left-4 top-1/2 -translate-y-1/2 p-3 rounded-full bg-white/10 hover:bg-white/25 text-white transition-colors z-10"
+                aria-label="Foto precedente"
+              >
+                <ChevronLeft className="h-7 w-7" />
+              </button>
+            )}
+
+            {/* Image */}
+            <img
+              src={photos[li]}
+              alt={`${property.name} — foto ${li + 1}`}
+              className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg shadow-2xl select-none"
+              onClick={(e) => e.stopPropagation()}
+            />
+
+            {/* Next */}
+            {photos.length > 1 && (
+              <button
+                onClick={(e) => { e.stopPropagation(); setLightboxIdx((i) => i !== null ? (i + 1) % photos.length : i); }}
+                className="absolute right-4 top-1/2 -translate-y-1/2 p-3 rounded-full bg-white/10 hover:bg-white/25 text-white transition-colors z-10"
+                aria-label="Foto successiva"
+              >
+                <ChevronRight className="h-7 w-7" />
+              </button>
+            )}
+
+            {/* Thumbnail strip */}
+            {photos.length > 1 && (
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 overflow-x-auto max-w-[90vw] px-2">
+                {photos.map((url, i) => (
+                  <button
+                    key={i}
+                    onClick={(e) => { e.stopPropagation(); setLightboxIdx(i); }}
+                    className={`flex-shrink-0 w-14 h-10 rounded-md overflow-hidden border-2 transition-all ${i === li ? "border-white scale-110" : "border-white/30 opacity-50 hover:opacity-80"}`}
+                  >
+                    <img src={url} alt="" className="w-full h-full object-cover" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
     </PublicLayout>
   );
 }
