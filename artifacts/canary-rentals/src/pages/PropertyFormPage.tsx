@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useLocation } from "wouter";
 import {
   useGetProperty,
@@ -16,8 +16,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Plus, Trash2, Image, GripVertical, ExternalLink } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { ArrowLeft, Plus, Trash2, ImagePlus, GripVertical, Upload, X } from "lucide-react";
 import { toast } from "sonner";
+import { usePhotoUpload } from "@/hooks/usePhotoUpload";
 
 interface FormValues {
   name: string;
@@ -61,9 +63,19 @@ export default function PropertyFormPage() {
   const updateProperty = useUpdateProperty();
 
   const [form, setForm] = useState<FormValues>(EMPTY_FORM);
-  const [newPhoto, setNewPhoto] = useState("");
   const [newIcal, setNewIcal] = useState("");
   const [saving, setSaving] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const { uploadFile, isUploading, progress } = usePhotoUpload({
+    onSuccess: (result) => {
+      setForm((f) => ({ ...f, photos: [...f.photos, result.servingUrl] }));
+      toast.success("Foto caricata con successo");
+    },
+    onError: (err) => {
+      toast.error(`Errore upload: ${err.message}`);
+    },
+  });
 
   useEffect(() => {
     if (existing) {
@@ -84,19 +96,21 @@ export default function PropertyFormPage() {
   const set = (key: keyof FormValues, value: FormValues[keyof FormValues]) =>
     setForm((f) => ({ ...f, [key]: value }));
 
-  const addPhoto = () => {
-    const url = newPhoto.trim();
-    if (!url) return;
-    if (!url.startsWith("http")) {
-      toast.error("Inserisci un URL valido che inizia con http");
-      return;
-    }
-    set("photos", [...form.photos, url]);
-    setNewPhoto("");
-  };
-
   const removePhoto = (idx: number) =>
     set("photos", form.photos.filter((_, i) => i !== idx));
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
+    e.target.value = "";
+    for (const file of files) {
+      if (!file.type.startsWith("image/")) {
+        toast.error(`${file.name}: solo immagini consentite`);
+        continue;
+      }
+      await uploadFile(file);
+    }
+  };
 
   const addIcal = () => {
     const url = newIcal.trim();
@@ -296,11 +310,39 @@ export default function PropertyFormPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
-              <Image className="h-4 w-4" />
+              <ImagePlus className="h-4 w-4" />
               Foto della proprietà
+              {form.photos.length > 0 && (
+                <Badge variant="secondary" className="ml-1">{form.photos.length}</Badge>
+              )}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={handleFileChange}
+            />
+
+            {/* Upload progress */}
+            {isUploading && (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground flex items-center gap-1.5">
+                    <Upload className="h-3.5 w-3.5 animate-pulse" />
+                    Caricamento in corso…
+                  </span>
+                  <span className="font-medium">{progress}%</span>
+                </div>
+                <Progress value={progress} className="h-1.5" />
+              </div>
+            )}
+
+            {/* Photo grid */}
             {form.photos.length > 0 && (
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {form.photos.map((url, idx) => (
@@ -314,22 +356,13 @@ export default function PropertyFormPage() {
                           "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='60' viewBox='0 0 100 60'%3E%3Crect width='100' height='60' fill='%23f1f5f9'/%3E%3Ctext x='50' y='35' text-anchor='middle' fill='%2394a3b8' font-size='10'%3EImmagine non valida%3C/text%3E%3C/svg%3E";
                       }}
                     />
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
-                      <a
-                        href={url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-1.5 rounded-full bg-white/90 hover:bg-white"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <ExternalLink className="h-3.5 w-3.5 text-gray-700" />
-                      </a>
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
                       <button
                         type="button"
                         onClick={() => removePhoto(idx)}
                         className="p-1.5 rounded-full bg-white/90 hover:bg-white"
                       >
-                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                        <X className="h-4 w-4 text-destructive" />
                       </button>
                     </div>
                     <Badge
@@ -343,23 +376,21 @@ export default function PropertyFormPage() {
               </div>
             )}
 
-            <div className="flex gap-2">
-              <Input
-                value={newPhoto}
-                onChange={(e) => setNewPhoto(e.target.value)}
-                placeholder="https://esempio.com/foto.jpg"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") { e.preventDefault(); addPhoto(); }
-                }}
-              />
-              <Button type="button" variant="secondary" onClick={addPhoto} className="shrink-0">
-                <Plus className="h-4 w-4 mr-1" />
-                Aggiungi
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Incolla l'URL di un'immagine (es. da Unsplash, Google Drive condiviso, ecc.)
-            </p>
+            {/* Drop zone / upload button */}
+            <button
+              type="button"
+              disabled={isUploading}
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-muted-foreground/30 bg-muted/20 py-8 text-center transition-colors hover:border-primary/50 hover:bg-muted/40 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Upload className="h-7 w-7 text-muted-foreground/60" />
+              <span className="text-sm font-medium text-muted-foreground">
+                Clicca per scegliere le foto
+              </span>
+              <span className="text-xs text-muted-foreground/70">
+                JPG, PNG, WEBP — più file selezionabili contemporaneamente
+              </span>
+            </button>
           </CardContent>
         </Card>
 
