@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Users as UsersIcon,
@@ -11,9 +11,8 @@ import {
   X,
   KeyRound,
   UserCircle2,
-  Mail,
-  Phone,
   Home,
+  MoreHorizontal,
 } from "lucide-react";
 import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
@@ -79,8 +78,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MoreHorizontal } from "lucide-react";
+
+// ── Types ──────────────────────────────────────────────────────────────────
 
 type AdminRole = "super_admin" | "property_manager";
 
@@ -124,27 +123,96 @@ interface Property {
   location: string;
 }
 
-function RoleBadge({ role }: { role: AdminRole }) {
-  if (role === "super_admin") {
+// A unified row can be either a system account or a customer account
+type Row =
+  | { kind: "system"; user: AdminUser }
+  | { kind: "customer"; user: Customer };
+
+// Filter categories
+type FilterKey = "tutti" | "clienti" | "host" | "super_admin";
+
+const FILTER_LABELS: Record<FilterKey, string> = {
+  tutti: "Tutti",
+  clienti: "Solo Clienti",
+  host: "Host",
+  super_admin: "Super Admin",
+};
+
+function matchesFilter(row: Row, filter: FilterKey): boolean {
+  if (filter === "tutti") return true;
+  if (row.kind === "system") {
+    if (filter === "host") return row.user.role === "property_manager";
+    if (filter === "super_admin") return row.user.role === "super_admin";
+    return false;
+  }
+  if (filter === "clienti") return row.user.adminRole === null;
+  if (filter === "host") return row.user.adminRole === "property_manager";
+  if (filter === "super_admin") return row.user.adminRole === "super_admin";
+  return false;
+}
+
+// Sort order: super_admin first, then hosts, then plain clients
+function rowSortKey(row: Row): number {
+  if (row.kind === "system") {
+    return row.user.role === "super_admin" ? 0 : 1;
+  }
+  if (row.user.adminRole === "super_admin") return 0;
+  if (row.user.adminRole === "property_manager") return 1;
+  return 2;
+}
+
+// ── Status badges ──────────────────────────────────────────────────────────
+
+function StatusBadges({ row }: { row: Row }) {
+  if (row.kind === "system") {
+    if (row.user.role === "super_admin") {
+      return (
+        <div className="flex flex-wrap items-center gap-1">
+          <Badge variant="default" className="gap-1">
+            <ShieldCheck className="h-3 w-3" />
+            Super Admin
+          </Badge>
+          <span className="text-xs text-muted-foreground">(sistema)</span>
+        </div>
+      );
+    }
     return (
-      <Badge variant="default" className="gap-1">
-        <ShieldCheck className="h-3 w-3" />
-        Super Admin
-      </Badge>
+      <div className="flex flex-wrap items-center gap-1">
+        <Badge variant="secondary" className="gap-1">
+          <Home className="h-3 w-3" />
+          Host
+        </Badge>
+        <span className="text-xs text-muted-foreground">(sistema)</span>
+      </div>
     );
   }
+
+  // customer
   return (
-    <Badge variant="secondary" className="gap-1">
-      <UserCog className="h-3 w-3" />
-      Property Manager
-    </Badge>
+    <div className="flex flex-wrap items-center gap-1">
+      <Badge variant="outline" className="gap-1 text-muted-foreground">
+        <UserCircle2 className="h-3 w-3" />
+        Cliente
+      </Badge>
+      {row.user.adminRole === "property_manager" && (
+        <Badge variant="secondary" className="gap-1">
+          <Home className="h-3 w-3" />
+          Host
+        </Badge>
+      )}
+      {row.user.adminRole === "super_admin" && (
+        <Badge variant="default" className="gap-1">
+          <ShieldCheck className="h-3 w-3" />
+          Super Admin
+        </Badge>
+      )}
+    </div>
   );
 }
 
-async function apiRequest<T>(
-  url: string,
-  options?: RequestInit,
-): Promise<T> {
+// ── API helper ─────────────────────────────────────────────────────────────
+
+async function apiRequest<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(url, {
     ...options,
     credentials: "include",
@@ -158,11 +226,15 @@ async function apiRequest<T>(
   return res.json();
 }
 
+// ── Main component ─────────────────────────────────────────────────────────
+
 export default function Users() {
   const { isSuperAdmin } = useAuth();
   const queryClient = useQueryClient();
 
-  // Admin users state
+  const [activeFilter, setActiveFilter] = useState<FilterKey>("tutti");
+
+  // System admin state
   const [createOpen, setCreateOpen] = useState(false);
   const [editUser, setEditUser] = useState<AdminUser | null>(null);
   const [deleteUser, setDeleteUser] = useState<AdminUser | null>(null);
@@ -176,7 +248,7 @@ export default function Users() {
   const [assignCustomer, setAssignCustomer] = useState<CustomerDetail | null>(null);
   const [assignCustomerLoading, setAssignCustomerLoading] = useState(false);
 
-  const { data: users = [], isLoading: isLoadingUsers } = useQuery<AdminUser[]>({
+  const { data: systemUsers = [], isLoading: isLoadingSystem } = useQuery<AdminUser[]>({
     queryKey: ["admin", "users"],
     queryFn: () => apiRequest("/api/admin/users"),
     enabled: isSuperAdmin,
@@ -194,13 +266,40 @@ export default function Users() {
     enabled: isSuperAdmin,
   });
 
+  const isLoading = isLoadingSystem || isLoadingCustomers;
+
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
     queryClient.invalidateQueries({ queryKey: ["admin", "customers"] });
   };
-  const invalidateUsers = invalidateAll;
 
-  // ── Admin user handlers ─────────────────────────────────────────────
+  // Build unified sorted list
+  const allRows = useMemo<Row[]>(() => {
+    const rows: Row[] = [
+      ...systemUsers.map((u): Row => ({ kind: "system", user: u })),
+      ...customers.map((c): Row => ({ kind: "customer", user: c })),
+    ];
+    return rows.sort((a, b) => rowSortKey(a) - rowSortKey(b));
+  }, [systemUsers, customers]);
+
+  const filteredRows = useMemo(
+    () => allRows.filter((r) => matchesFilter(r, activeFilter)),
+    [allRows, activeFilter],
+  );
+
+  // Count per filter
+  const counts = useMemo(() => {
+    const c: Record<FilterKey, number> = { tutti: 0, clienti: 0, host: 0, super_admin: 0 };
+    for (const row of allRows) {
+      c.tutti++;
+      if (matchesFilter(row, "clienti")) c.clienti++;
+      if (matchesFilter(row, "host")) c.host++;
+      if (matchesFilter(row, "super_admin")) c.super_admin++;
+    }
+    return c;
+  }, [allRows]);
+
+  // ── System admin handlers ─────────────────────────────────────────────────
 
   async function loadUserDetail(user: AdminUser) {
     try {
@@ -216,7 +315,7 @@ export default function Users() {
     try {
       await apiRequest(`/api/admin/users/${deleteUser.id}`, { method: "DELETE" });
       toast.success(`Utente "${deleteUser.username}" eliminato`);
-      invalidateUsers();
+      invalidateAll();
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -234,7 +333,7 @@ export default function Users() {
       });
       const updated = await apiRequest<AdminUserDetail>(`/api/admin/users/${assignUser.id}`);
       setAssignUser(updated);
-      invalidateUsers();
+      invalidateAll();
       toast.success("Proprietà assegnata");
     } catch (e) {
       toast.error((e as Error).message);
@@ -250,7 +349,7 @@ export default function Users() {
       await apiRequest(`/api/admin/property-assignments/${assignmentId}`, { method: "DELETE" });
       const updated = await apiRequest<AdminUserDetail>(`/api/admin/users/${assignUser.id}`);
       setAssignUser(updated);
-      invalidateUsers();
+      invalidateAll();
       toast.success("Assegnazione rimossa");
     } catch (e) {
       toast.error((e as Error).message);
@@ -259,7 +358,7 @@ export default function Users() {
     }
   }
 
-  // ── Customer admin-role handlers ────────────────────────────────────
+  // ── Customer role handlers ────────────────────────────────────────────────
 
   async function handleRevokeHost() {
     if (!revokeHostCustomer) return;
@@ -269,7 +368,9 @@ export default function Users() {
         method: "PUT",
         body: JSON.stringify({ role: null }),
       });
-      toast.success(`Ruolo host rimosso da ${revokeHostCustomer.firstName} ${revokeHostCustomer.lastName}`);
+      toast.success(
+        `Ruolo host rimosso da ${revokeHostCustomer.firstName} ${revokeHostCustomer.lastName}`,
+      );
       invalidateAll();
     } catch (e) {
       toast.error((e as Error).message);
@@ -281,10 +382,12 @@ export default function Users() {
 
   async function loadCustomerDetail(customer: Customer) {
     try {
-      const detail = await apiRequest<CustomerDetail>(`/api/admin/customers/${customer.id}/assignments`);
+      const detail = await apiRequest<CustomerDetail>(
+        `/api/admin/customers/${customer.id}/assignments`,
+      );
       setAssignCustomer(detail);
     } catch {
-      toast.error("Impossibile caricare le assegnazioni del cliente");
+      toast.error("Impossibile caricare le assegnazioni");
     }
   }
 
@@ -296,7 +399,9 @@ export default function Users() {
         method: "POST",
         body: JSON.stringify({ propertyId }),
       });
-      const updated = await apiRequest<CustomerDetail>(`/api/admin/customers/${assignCustomer.id}/assignments`);
+      const updated = await apiRequest<CustomerDetail>(
+        `/api/admin/customers/${assignCustomer.id}/assignments`,
+      );
       setAssignCustomer(updated);
       invalidateAll();
       toast.success("Proprietà assegnata");
@@ -312,7 +417,9 @@ export default function Users() {
     setAssignCustomerLoading(true);
     try {
       await apiRequest(`/api/admin/property-assignments/${assignmentId}`, { method: "DELETE" });
-      const updated = await apiRequest<CustomerDetail>(`/api/admin/customers/${assignCustomer.id}/assignments`);
+      const updated = await apiRequest<CustomerDetail>(
+        `/api/admin/customers/${assignCustomer.id}/assignments`,
+      );
       setAssignCustomer(updated);
       invalidateAll();
       toast.success("Assegnazione rimossa");
@@ -344,257 +451,105 @@ export default function Users() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
+      {/* ── Header ── */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Utenti</h1>
-          <p className="text-muted-foreground">Tutti gli utenti registrati sulla piattaforma.</p>
+          <p className="text-muted-foreground">
+            Tutti gli utenti registrati sulla piattaforma.
+          </p>
         </div>
         <Button onClick={() => setCreateOpen(true)} className="gap-2">
           <Plus className="h-4 w-4" />
-          Nuovo Amministratore
+          Nuovo account di sistema
         </Button>
       </div>
 
-      <Tabs defaultValue="admin">
-        <TabsList className="mb-4">
-          <TabsTrigger value="admin" className="gap-2">
-            <UserCog className="h-4 w-4" />
-            Amministratori
-            {!isLoadingUsers && (
-              <span className="ml-1 rounded-full bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
-                {users.length}
-              </span>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="customers" className="gap-2">
-            <UserCircle2 className="h-4 w-4" />
-            Clienti
-            {!isLoadingCustomers && (
-              <span className="ml-1 rounded-full bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
-                {customers.length}
-              </span>
-            )}
-          </TabsTrigger>
-        </TabsList>
+      {/* ── Filter chips ── */}
+      <div className="flex flex-wrap gap-2">
+        {(Object.keys(FILTER_LABELS) as FilterKey[]).map((key) => (
+          <button
+            key={key}
+            onClick={() => setActiveFilter(key)}
+            className={[
+              "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-medium transition-colors",
+              activeFilter === key
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-border bg-background text-muted-foreground hover:border-foreground/30 hover:text-foreground",
+            ].join(" ")}
+          >
+            {FILTER_LABELS[key]}
+            <span
+              className={[
+                "rounded-full px-1.5 py-0.5 text-xs",
+                activeFilter === key
+                  ? "bg-primary-foreground/20 text-primary-foreground"
+                  : "bg-muted text-muted-foreground",
+              ].join(" ")}
+            >
+              {counts[key]}
+            </span>
+          </button>
+        ))}
+      </div>
 
-        {/* ── Tab: Amministratori ── */}
-        <TabsContent value="admin">
-          <Card>
-            <CardContent className="p-0">
-              {isLoadingUsers ? (
-                <div className="p-6 space-y-3">
-                  {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
-                </div>
-              ) : users.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-16 text-center">
-                  <UsersIcon className="h-12 w-12 text-muted-foreground/40 mb-4" />
-                  <p className="text-muted-foreground">Nessun utente trovato. Crea il primo utente.</p>
-                </div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Utente</TableHead>
-                      <TableHead>Ruolo</TableHead>
-                      <TableHead className="hidden md:table-cell">Proprietà assegnate</TableHead>
-                      <TableHead className="hidden md:table-cell">Registrato</TableHead>
-                      <TableHead className="w-[60px]" />
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {users.map((user) => (
-                      <TableRow key={user.id}>
-                        <TableCell>
-                          <div className="flex items-center gap-3">
-                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary font-semibold text-sm shrink-0">
-                              {(user.displayName ?? user.username).charAt(0).toUpperCase()}
-                            </div>
-                            <div>
-                              <p className="font-medium leading-none">{user.displayName ?? user.username}</p>
-                              <p className="text-xs text-muted-foreground mt-0.5">@{user.username}</p>
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell><RoleBadge role={user.role} /></TableCell>
-                        <TableCell className="hidden md:table-cell">
-                          {user.role === "property_manager" ? (
-                            <button
-                              onClick={() => loadUserDetail(user)}
-                              className="text-sm text-muted-foreground hover:text-foreground underline-offset-2 hover:underline transition-colors"
-                            >
-                              Gestisci assegnazioni
-                            </button>
-                          ) : (
-                            <span className="text-sm text-muted-foreground">—</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
-                          {format(parseISO(user.createdAt), "dd/MM/yyyy")}
-                        </TableCell>
-                        <TableCell>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8">
-                                <MoreHorizontal className="h-4 w-4" />
-                                <span className="sr-only">Azioni</span>
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuLabel>Azioni</DropdownMenuLabel>
-                              <DropdownMenuItem onClick={() => setEditUser(user)}>
-                                <Pencil className="h-4 w-4 mr-2" />
-                                Modifica
-                              </DropdownMenuItem>
-                              {user.role === "property_manager" && (
-                                <DropdownMenuItem onClick={() => loadUserDetail(user)}>
-                                  <Building className="h-4 w-4 mr-2" />
-                                  Proprietà assegnate
-                                </DropdownMenuItem>
-                              )}
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                className="text-destructive focus:text-destructive"
-                                onClick={() => setDeleteUser(user)}
-                              >
-                                <Trash2 className="h-4 w-4 mr-2" />
-                                Elimina
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+      {/* ── Unified users table ── */}
+      <Card>
+        <CardContent className="p-0">
+          {isLoading ? (
+            <div className="p-6 space-y-3">
+              {[...Array(5)].map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          ) : filteredRows.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <UsersIcon className="h-12 w-12 text-muted-foreground/40 mb-4" />
+              <p className="text-muted-foreground">
+                {activeFilter === "tutti"
+                  ? "Nessun utente registrato."
+                  : `Nessun utente corrisponde al filtro "${FILTER_LABELS[activeFilter]}".`}
+              </p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Utente</TableHead>
+                  <TableHead>Tipo</TableHead>
+                  <TableHead className="hidden md:table-cell">Proprietà</TableHead>
+                  <TableHead className="hidden lg:table-cell">Registrato</TableHead>
+                  <TableHead className="w-[52px]" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredRows.map((row) => (
+                  <UnifiedRow
+                    key={row.kind === "system" ? `sys-${row.user.id}` : `cust-${row.user.id}`}
+                    row={row}
+                    onEditSystem={(u) => setEditUser(u)}
+                    onDeleteSystem={(u) => setDeleteUser(u)}
+                    onManageSystemProps={(u) => loadUserDetail(u)}
+                    onMakeHost={(c) => setMakeHostCustomer(c)}
+                    onRevokeHost={(c) => setRevokeHostCustomer(c)}
+                    onManageCustomerProps={(c) => loadCustomerDetail(c)}
+                  />
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
 
-        {/* ── Tab: Clienti ── */}
-        <TabsContent value="customers">
-          <Card>
-            <CardContent className="p-0">
-              {isLoadingCustomers ? (
-                <div className="p-6 space-y-3">
-                  {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
-                </div>
-              ) : customers.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-16 text-center">
-                  <UserCircle2 className="h-12 w-12 text-muted-foreground/40 mb-4" />
-                  <p className="text-muted-foreground">Nessun cliente registrato ancora.</p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    I clienti appaiono qui dopo la registrazione sul sito pubblico.
-                  </p>
-                </div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Cliente</TableHead>
-                      <TableHead className="hidden md:table-cell">Email</TableHead>
-                      <TableHead className="hidden lg:table-cell">Telefono</TableHead>
-                      <TableHead>Ruolo</TableHead>
-                      <TableHead className="hidden md:table-cell">Registrato</TableHead>
-                      <TableHead className="w-[120px]" />
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {customers.map((c) => (
-                      <TableRow key={c.id}>
-                        <TableCell>
-                          <div className="flex items-center gap-3">
-                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-muted-foreground font-semibold text-sm shrink-0">
-                              {c.firstName.charAt(0).toUpperCase()}
-                            </div>
-                            <div>
-                              <p className="font-medium leading-none">{c.firstName} {c.lastName}</p>
-                              <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
-                                <Mail className="h-3 w-3 shrink-0" />
-                                {c.email}
-                              </p>
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
-                          {c.email}
-                        </TableCell>
-                        <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
-                          {c.phone ? (
-                            <div className="flex items-center gap-1.5">
-                              <Phone className="h-3.5 w-3.5 shrink-0" />
-                              {c.phone}
-                            </div>
-                          ) : <span>—</span>}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <Badge variant="outline" className="gap-1 text-muted-foreground">
-                              <UserCircle2 className="h-3 w-3" />
-                              Cliente
-                            </Badge>
-                            {c.adminRole && <RoleBadge role={c.adminRole} />}
-                          </div>
-                        </TableCell>
-                        <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
-                          {format(parseISO(c.createdAt), "dd/MM/yyyy")}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1">
-                            {c.adminRole === "property_manager" && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-8 gap-1 text-xs"
-                                title="Gestisci proprietà assegnate"
-                                onClick={() => loadCustomerDetail(c)}
-                              >
-                                <Building className="h-3.5 w-3.5" />
-                                <span className="hidden sm:inline">Proprietà</span>
-                              </Button>
-                            )}
-                            {c.adminRole ? (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-8 gap-1 text-xs text-destructive hover:text-destructive"
-                                onClick={() => setRevokeHostCustomer(c)}
-                              >
-                                <X className="h-3.5 w-3.5" />
-                                <span className="hidden sm:inline">Revoca</span>
-                              </Button>
-                            ) : (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-8 gap-1.5 text-xs"
-                                onClick={() => setMakeHostCustomer(c)}
-                              >
-                                <Home className="h-3.5 w-3.5" />
-                                Rendi Host
-                              </Button>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+      {/* ── Dialogs & Sheets ── */}
 
-      {/* ── Create admin user dialog ── */}
       <CreateUserDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
-        onSuccess={invalidateUsers}
+        onSuccess={invalidateAll}
       />
 
-      {/* ── Make host dialog (simplified) ── */}
       {makeHostCustomer && (
         <MakeHostDialog
           customer={makeHostCustomer}
@@ -607,7 +562,6 @@ export default function Users() {
         />
       )}
 
-      {/* ── Revoke host confirmation ── */}
       <AlertDialog
         open={!!revokeHostCustomer}
         onOpenChange={(o) => !o && setRevokeHostCustomer(null)}
@@ -616,9 +570,12 @@ export default function Users() {
           <AlertDialogHeader>
             <AlertDialogTitle>Revoca ruolo host</AlertDialogTitle>
             <AlertDialogDescription>
-              Sei sicuro di voler rimuovere il ruolo host da{" "}
-              <strong>{revokeHostCustomer?.firstName} {revokeHostCustomer?.lastName}</strong>?{" "}
-              Il cliente non potrà più accedere al pannello di gestione e perderà le assegnazioni di proprietà.
+              Rimuovi il ruolo host da{" "}
+              <strong>
+                {revokeHostCustomer?.firstName} {revokeHostCustomer?.lastName}
+              </strong>
+              ? Il cliente non potrà più accedere al pannello admin e perderà le
+              assegnazioni di proprietà.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -634,31 +591,28 @@ export default function Users() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* ── Edit admin user dialog ── */}
       {editUser && (
         <EditUserDialog
           user={editUser}
           open={!!editUser}
           onOpenChange={(o) => !o && setEditUser(null)}
           onSuccess={() => {
-            invalidateUsers();
+            invalidateAll();
             setEditUser(null);
           }}
         />
       )}
 
-      {/* ── Delete admin user confirmation ── */}
       <AlertDialog
         open={!!deleteUser}
         onOpenChange={(o) => !o && setDeleteUser(null)}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Elimina utente</AlertDialogTitle>
+            <AlertDialogTitle>Elimina account di sistema</AlertDialogTitle>
             <AlertDialogDescription>
-              Sei sicuro di voler eliminare l'utente{" "}
-              <strong>{deleteUser?.username}</strong>? Tutte le assegnazioni di
-              proprietà saranno rimosse. Questa azione è irreversibile.
+              Elimina l'account <strong>{deleteUser?.username}</strong>? Tutte le
+              assegnazioni di proprietà saranno rimosse. Azione irreversibile.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -673,14 +627,17 @@ export default function Users() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* ── Admin user property assignments sheet ── */}
+      {/* System user property assignments */}
       <Sheet open={!!assignUser} onOpenChange={(o) => !o && setAssignUser(null)}>
         <SheetContent className="sm:max-w-md">
           <SheetHeader>
             <SheetTitle>Proprietà assegnate</SheetTitle>
             <SheetDescription>
               {assignUser && (
-                <>Gestisci le proprietà visibili a <strong>{assignUser.displayName ?? assignUser.username}</strong>.</>
+                <>
+                  Gestisci le proprietà visibili a{" "}
+                  <strong>{assignUser.displayName ?? assignUser.username}</strong>.
+                </>
               )}
             </SheetDescription>
           </SheetHeader>
@@ -696,14 +653,20 @@ export default function Users() {
         </SheetContent>
       </Sheet>
 
-      {/* ── Customer property assignments sheet ── */}
+      {/* Customer property assignments */}
       <Sheet open={!!assignCustomer} onOpenChange={(o) => !o && setAssignCustomer(null)}>
         <SheetContent className="sm:max-w-md">
           <SheetHeader>
             <SheetTitle>Proprietà assegnate</SheetTitle>
             <SheetDescription>
               {assignCustomer && (
-                <>Gestisci le proprietà visibili a <strong>{assignCustomer.firstName} {assignCustomer.lastName}</strong>.</>
+                <>
+                  Gestisci le proprietà visibili a{" "}
+                  <strong>
+                    {assignCustomer.firstName} {assignCustomer.lastName}
+                  </strong>
+                  .
+                </>
               )}
             </SheetDescription>
           </SheetHeader>
@@ -722,9 +685,181 @@ export default function Users() {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Shared: Assignment List                                               */
-/* ------------------------------------------------------------------ */
+// ── Unified table row ──────────────────────────────────────────────────────
+
+function UnifiedRow({
+  row,
+  onEditSystem,
+  onDeleteSystem,
+  onManageSystemProps,
+  onMakeHost,
+  onRevokeHost,
+  onManageCustomerProps,
+}: {
+  row: Row;
+  onEditSystem: (u: AdminUser) => void;
+  onDeleteSystem: (u: AdminUser) => void;
+  onManageSystemProps: (u: AdminUser) => void;
+  onMakeHost: (c: Customer) => void;
+  onRevokeHost: (c: Customer) => void;
+  onManageCustomerProps: (c: Customer) => void;
+}) {
+  if (row.kind === "system") {
+    const u = row.user;
+    const label = u.displayName ?? u.username;
+    return (
+      <TableRow>
+        <TableCell>
+          <div className="flex items-center gap-3">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary font-semibold text-sm shrink-0">
+              {label.charAt(0).toUpperCase()}
+            </div>
+            <div>
+              <p className="font-medium leading-none">{label}</p>
+              <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                <UserCog className="h-3 w-3" />
+                @{u.username}
+              </p>
+            </div>
+          </div>
+        </TableCell>
+        <TableCell>
+          <StatusBadges row={row} />
+        </TableCell>
+        <TableCell className="hidden md:table-cell">
+          {u.role === "property_manager" ? (
+            <button
+              onClick={() => onManageSystemProps(u)}
+              className="text-sm text-muted-foreground hover:text-foreground underline-offset-2 hover:underline transition-colors"
+            >
+              Gestisci assegnazioni
+            </button>
+          ) : (
+            <span className="text-sm text-muted-foreground">Accesso completo</span>
+          )}
+        </TableCell>
+        <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
+          {format(parseISO(u.createdAt), "dd/MM/yyyy")}
+        </TableCell>
+        <TableCell>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8">
+                <MoreHorizontal className="h-4 w-4" />
+                <span className="sr-only">Azioni</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>Account di sistema</DropdownMenuLabel>
+              <DropdownMenuItem onClick={() => onEditSystem(u)}>
+                <Pencil className="h-4 w-4 mr-2" />
+                Modifica
+              </DropdownMenuItem>
+              {u.role === "property_manager" && (
+                <DropdownMenuItem onClick={() => onManageSystemProps(u)}>
+                  <Building className="h-4 w-4 mr-2" />
+                  Proprietà assegnate
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive"
+                onClick={() => onDeleteSystem(u)}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Elimina
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </TableCell>
+      </TableRow>
+    );
+  }
+
+  // Customer row
+  const c = row.user;
+  const isHost = c.adminRole !== null;
+  return (
+    <TableRow>
+      <TableCell>
+        <div className="flex items-center gap-3">
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-muted-foreground font-semibold text-sm shrink-0">
+            {c.firstName.charAt(0).toUpperCase()}
+          </div>
+          <div>
+            <p className="font-medium leading-none">
+              {c.firstName} {c.lastName}
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">{c.email}</p>
+          </div>
+        </div>
+      </TableCell>
+      <TableCell>
+        <StatusBadges row={row} />
+      </TableCell>
+      <TableCell className="hidden md:table-cell">
+        {c.adminRole === "property_manager" ? (
+          <button
+            onClick={() => onManageCustomerProps(c)}
+            className="text-sm text-muted-foreground hover:text-foreground underline-offset-2 hover:underline transition-colors"
+          >
+            Gestisci assegnazioni
+          </button>
+        ) : c.adminRole === "super_admin" ? (
+          <span className="text-sm text-muted-foreground">Accesso completo</span>
+        ) : (
+          <span className="text-sm text-muted-foreground">—</span>
+        )}
+      </TableCell>
+      <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
+        {format(parseISO(c.createdAt), "dd/MM/yyyy")}
+      </TableCell>
+      <TableCell>
+        {isHost ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8">
+                <MoreHorizontal className="h-4 w-4" />
+                <span className="sr-only">Azioni</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>
+                {c.firstName} {c.lastName}
+              </DropdownMenuLabel>
+              {c.adminRole === "property_manager" && (
+                <DropdownMenuItem onClick={() => onManageCustomerProps(c)}>
+                  <Building className="h-4 w-4 mr-2" />
+                  Proprietà assegnate
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive"
+                onClick={() => onRevokeHost(c)}
+              >
+                <X className="h-4 w-4 mr-2" />
+                Revoca ruolo host
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 gap-1.5 text-xs"
+            onClick={() => onMakeHost(c)}
+          >
+            <Home className="h-3.5 w-3.5" />
+            Rendi Host
+          </Button>
+        )}
+      </TableCell>
+    </TableRow>
+  );
+}
+
+// ── Shared: Assignment list ────────────────────────────────────────────────
 
 function AssignmentList({
   assignments,
@@ -751,7 +886,10 @@ function AssignmentList({
         ) : (
           <div className="space-y-2">
             {assignments.map((a) => (
-              <div key={a.id} className="flex items-center justify-between rounded-md border p-3">
+              <div
+                key={a.id}
+                className="flex items-center justify-between rounded-md border p-3"
+              >
                 <div>
                   <p className="text-sm font-medium">{a.propertyName}</p>
                   <p className="text-xs text-muted-foreground">{a.propertyLocation}</p>
@@ -776,7 +914,10 @@ function AssignmentList({
           <h4 className="text-sm font-medium">Aggiungi proprietà</h4>
           <div className="space-y-2">
             {unassigned.map((p) => (
-              <div key={p.id} className="flex items-center justify-between rounded-md border border-dashed p-3">
+              <div
+                key={p.id}
+                className="flex items-center justify-between rounded-md border border-dashed p-3"
+              >
                 <div>
                   <p className="text-sm font-medium">{p.name}</p>
                   <p className="text-xs text-muted-foreground">{p.location}</p>
@@ -799,9 +940,7 @@ function AssignmentList({
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Create Admin User Dialog                                              */
-/* ------------------------------------------------------------------ */
+// ── Create system admin dialog ─────────────────────────────────────────────
 
 function CreateUserDialog({
   open,
@@ -840,7 +979,7 @@ function CreateUserDialog({
           displayName: form.displayName || undefined,
         }),
       });
-      toast.success(`Utente "${form.username}" creato`);
+      toast.success(`Account "${form.username}" creato`);
       onSuccess();
       onOpenChange(false);
       reset();
@@ -855,8 +994,11 @@ function CreateUserDialog({
     <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) reset(); }}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Nuovo utente</DialogTitle>
-          <DialogDescription>Crea un nuovo account amministratore di sistema.</DialogDescription>
+          <DialogTitle>Nuovo account di sistema</DialogTitle>
+          <DialogDescription>
+            Crea un account amministrativo con username e password dedicati.
+            Per abilitare un cliente esistente, usa invece il pulsante "Rendi Host".
+          </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
@@ -889,7 +1031,7 @@ function CreateUserDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="property_manager">Property Manager</SelectItem>
+                <SelectItem value="property_manager">Host / Property Manager</SelectItem>
                 <SelectItem value="super_admin">Super Admin</SelectItem>
               </SelectContent>
             </Select>
@@ -908,11 +1050,15 @@ function CreateUserDialog({
           </div>
           {error && <p className="text-sm text-destructive font-medium">{error}</p>}
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => { onOpenChange(false); reset(); }}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => { onOpenChange(false); reset(); }}
+            >
               Annulla
             </Button>
             <Button type="submit" disabled={loading}>
-              {loading ? "Creazione..." : "Crea utente"}
+              {loading ? "Creazione..." : "Crea account"}
             </Button>
           </DialogFooter>
         </form>
@@ -921,9 +1067,7 @@ function CreateUserDialog({
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Make Host Dialog (simplified: just set adminRole on customer)         */
-/* ------------------------------------------------------------------ */
+// ── Make host dialog ───────────────────────────────────────────────────────
 
 function MakeHostDialog({
   customer,
@@ -937,7 +1081,10 @@ function MakeHostDialog({
   onSuccess: () => void;
 }) {
   const [loading, setLoading] = useState(false);
+  const [role, setRole] = useState<AdminRole>("property_manager");
   const [error, setError] = useState("");
+
+  const roleLabel = role === "property_manager" ? "Property Manager (Host)" : "Super Admin";
 
   const handleConfirm = async () => {
     setError("");
@@ -945,9 +1092,11 @@ function MakeHostDialog({
     try {
       await apiRequest(`/api/admin/customers/${customer.id}/admin-role`, {
         method: "PUT",
-        body: JSON.stringify({ role: "property_manager" }),
+        body: JSON.stringify({ role }),
       });
-      toast.success(`${customer.firstName} ${customer.lastName} è ora un Property Manager`);
+      toast.success(
+        `${customer.firstName} ${customer.lastName} è ora ${roleLabel}`,
+      );
       onSuccess();
       onOpenChange(false);
     } catch (e) {
@@ -958,28 +1107,68 @@ function MakeHostDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) setError(""); }}>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        onOpenChange(o);
+        if (!o) { setError(""); setRole("property_manager"); }
+      }}
+    >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Home className="h-5 w-5" />
-            Abilita come Host
+            Abilita accesso admin
           </DialogTitle>
           <DialogDescription>
-            Assegna il ruolo di <strong>Property Manager</strong> a{" "}
-            <strong>{customer.firstName} {customer.lastName}</strong>.
+            Aggiungi un ruolo admin a{" "}
+            <strong>
+              {customer.firstName} {customer.lastName}
+            </strong>{" "}
+            senza creare un nuovo account.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-3 py-2">
-          <div className="rounded-md bg-muted/50 border px-3 py-2 text-sm text-muted-foreground flex items-center gap-2">
+        <div className="space-y-4 py-1">
+          <div className="rounded-md bg-muted/50 border px-3 py-2.5 text-sm text-muted-foreground flex items-center gap-2">
             <UserCircle2 className="h-4 w-4 shrink-0" />
-            {customer.email}
+            <div>
+              <p className="font-medium text-foreground">
+                {customer.firstName} {customer.lastName}
+              </p>
+              <p className="text-xs">{customer.email}</p>
+            </div>
           </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="mh-role">Ruolo da assegnare</Label>
+            <Select
+              value={role}
+              onValueChange={(v) => setRole(v as AdminRole)}
+            >
+              <SelectTrigger id="mh-role">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="property_manager">
+                  <div className="flex items-center gap-2">
+                    <Home className="h-3.5 w-3.5" />
+                    Property Manager (Host)
+                  </div>
+                </SelectItem>
+                <SelectItem value="super_admin">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="h-3.5 w-3.5" />
+                    Super Admin
+                  </div>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
           <p className="text-sm text-muted-foreground">
-            Il cliente potrà accedere al pannello amministrativo usando la
-            sua email e la sua password esistente. Non sarà necessario creare
-            un nuovo account separato.
+            Il cliente accederà al pannello admin usando la sua email e la
+            password che usa già su questo sito.
           </p>
         </div>
 
@@ -989,13 +1178,17 @@ function MakeHostDialog({
           <Button
             type="button"
             variant="outline"
-            onClick={() => { onOpenChange(false); setError(""); }}
+            onClick={() => { onOpenChange(false); setError(""); setRole("property_manager"); }}
           >
             Annulla
           </Button>
           <Button onClick={handleConfirm} disabled={loading} className="gap-2">
-            <Home className="h-4 w-4" />
-            {loading ? "Abilitazione..." : "Abilita come Host"}
+            {role === "super_admin" ? (
+              <ShieldCheck className="h-4 w-4" />
+            ) : (
+              <Home className="h-4 w-4" />
+            )}
+            {loading ? "Abilitazione..." : `Abilita come ${roleLabel}`}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1003,9 +1196,7 @@ function MakeHostDialog({
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Edit Admin User Dialog                                                */
-/* ------------------------------------------------------------------ */
+// ── Edit system user dialog ────────────────────────────────────────────────
 
 function EditUserDialog({
   user,
@@ -1053,7 +1244,7 @@ function EditUserDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Modifica utente</DialogTitle>
+          <DialogTitle>Modifica account di sistema</DialogTitle>
           <DialogDescription>@{user.username}</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -1076,7 +1267,7 @@ function EditUserDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="property_manager">Property Manager</SelectItem>
+                <SelectItem value="property_manager">Host / Property Manager</SelectItem>
                 <SelectItem value="super_admin">Super Admin</SelectItem>
               </SelectContent>
             </Select>
@@ -1085,7 +1276,9 @@ function EditUserDialog({
             <Label htmlFor="e-password" className="flex items-center gap-1.5">
               <KeyRound className="h-3.5 w-3.5" />
               Nuova password{" "}
-              <span className="text-muted-foreground font-normal">(lascia vuoto per non cambiare)</span>
+              <span className="text-muted-foreground font-normal">
+                (lascia vuoto per non cambiare)
+              </span>
             </Label>
             <Input
               id="e-password"
