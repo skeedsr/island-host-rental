@@ -5,14 +5,14 @@ import { cn } from "@/lib/utils";
 
 export function Sidebar() {
   const [location] = useLocation();
-  const { logout } = useAuth();
+  const { logout, isSuperAdmin } = useAuth();
 
   const links = [
     { href: "/", label: "Dashboard", icon: Home },
     { href: "/properties", label: "Properties", icon: Building },
     { href: "/bookings", label: "Bookings", icon: ListTodo },
     { href: "/calendar", label: "Calendar", icon: Calendar },
-    { href: "/admin/users", label: "Users", icon: Users },
+    ...(isSuperAdmin ? [{ href: "/admin/users", label: "Users", icon: Users }] : []),
   ];
 
   return (

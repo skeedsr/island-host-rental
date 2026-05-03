@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import type { AuthState } from "@/hooks/use-auth";
 
 export function LoginPage() {
   const queryClient = useQueryClient();
@@ -33,7 +34,12 @@ export function LoginPage() {
         return;
       }
 
-      queryClient.setQueryData(["auth", "me"], { isAdmin: true });
+      const authState: AuthState = {
+        isAdmin: true,
+        role: data.role,
+        username: data.username,
+      };
+      queryClient.setQueryData(["auth", "me"], authState);
     } catch {
       setError("Errore di connessione. Riprova.");
     } finally {

@@ -1,7 +1,12 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
-interface AuthState {
+export type AdminRole = "super_admin" | "property_manager";
+
+export interface AuthState {
   isAdmin: boolean;
+  role?: AdminRole;
+  username?: string;
+  userId?: number;
 }
 
 async function fetchMe(): Promise<AuthState> {
@@ -28,6 +33,11 @@ export function useAuth() {
 
   return {
     isAdmin: data?.isAdmin ?? false,
+    role: data?.role,
+    username: data?.username,
+    userId: data?.userId,
+    isSuperAdmin: data?.role === "super_admin",
+    isPropertyManager: data?.role === "property_manager",
     isLoading,
     logout,
   };
