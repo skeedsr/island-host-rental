@@ -5,6 +5,7 @@ export interface CustomerUser {
   firstName: string;
   lastName: string;
   email: string;
+  isHost: boolean;
 }
 
 async function fetchCustomerMe(): Promise<CustomerUser | null> {

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Home, User, LogOut, ChevronDown, Star, Clock, Building2 } from "lucide-react";
+import { Home, User, LogOut, ChevronDown, Star, Clock, Building2, LayoutDashboard } from "lucide-react";
 import { Toaster } from "@/components/ui/sonner";
 import { useCustomerAuth } from "@/hooks/use-customer-auth";
 import { CustomerAuthModal } from "@/components/CustomerAuthModal";
@@ -112,6 +112,14 @@ export function PublicLayout({ children }: PublicLayoutProps) {
                     <p className="text-xs text-muted-foreground truncate">{customer.email}</p>
                   </div>
                   <DropdownMenuSeparator />
+                  {customer.isHost && (
+                    <DropdownMenuItem asChild>
+                      <a href="/admin" className="flex items-center gap-2 cursor-pointer">
+                        <LayoutDashboard className="h-4 w-4" />
+                        Area Host
+                      </a>
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuItem onClick={logout} className="text-destructive cursor-pointer">
                     <LogOut className="h-4 w-4 mr-2" />
                     Esci
