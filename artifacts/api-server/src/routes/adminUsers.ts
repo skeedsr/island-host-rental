@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, adminUsersTable, propertyAssignmentsTable, propertiesTable, customersTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, isNull, or } from "drizzle-orm";
 import { z } from "zod";
 import { requireSuperAdmin } from "../middlewares/auth";
 import { hashPassword } from "../lib/password";
@@ -18,6 +18,7 @@ const UpdateUserBody = z.object({
   password: z.string().min(8).optional(),
   role: z.enum(["super_admin", "property_manager"]).optional(),
   displayName: z.string().max(128).optional(),
+  linkedCustomerId: z.number().int().positive().nullable().optional(),
 });
 
 const AssignPropertyBody = z.object({
@@ -31,6 +32,7 @@ function safeUser(u: typeof adminUsersTable.$inferSelect) {
     username: u.username,
     role: u.role,
     displayName: u.displayName,
+    linkedCustomerId: u.linkedCustomerId,
     createdAt: u.createdAt,
     updatedAt: u.updatedAt,
   };
@@ -118,7 +120,21 @@ router.get("/admin/users/:id", requireSuperAdmin, async (req, res) => {
     )
     .where(eq(propertyAssignmentsTable.adminUserId, id));
 
-  res.json({ ...safeUser(user), assignments });
+  let linkedCustomer: { id: number; firstName: string; lastName: string; email: string } | null = null;
+  if (user.linkedCustomerId) {
+    const [customer] = await db
+      .select({
+        id: customersTable.id,
+        firstName: customersTable.firstName,
+        lastName: customersTable.lastName,
+        email: customersTable.email,
+      })
+      .from(customersTable)
+      .where(eq(customersTable.id, user.linkedCustomerId));
+    linkedCustomer = customer ?? null;
+  }
+
+  res.json({ ...safeUser(user), assignments, linkedCustomer });
 });
 
 router.put("/admin/users/:id", requireSuperAdmin, async (req, res) => {
@@ -140,6 +156,34 @@ router.put("/admin/users/:id", requireSuperAdmin, async (req, res) => {
     updateData.displayName = parsed.data.displayName;
   if (parsed.data.password !== undefined) {
     updateData.passwordHash = await hashPassword(parsed.data.password);
+  }
+
+  if ("linkedCustomerId" in parsed.data) {
+    const newLinkedId = parsed.data.linkedCustomerId;
+
+    if (newLinkedId !== null && newLinkedId !== undefined) {
+      const [customer] = await db
+        .select({ id: customersTable.id })
+        .from(customersTable)
+        .where(eq(customersTable.id, newLinkedId));
+      if (!customer) {
+        res.status(404).json({ error: "Cliente non trovato" });
+        return;
+      }
+
+      const [alreadyLinked] = await db
+        .select({ id: adminUsersTable.id })
+        .from(adminUsersTable)
+        .where(eq(adminUsersTable.linkedCustomerId, newLinkedId));
+      if (alreadyLinked && alreadyLinked.id !== id) {
+        res.status(409).json({
+          error: "Questo cliente è già collegato a un altro utente amministratore",
+        });
+        return;
+      }
+    }
+
+    updateData.linkedCustomerId = newLinkedId ?? null;
   }
 
   const [updated] = await db
