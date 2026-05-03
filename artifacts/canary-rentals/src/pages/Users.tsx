@@ -10,6 +10,9 @@ import {
   Building,
   X,
   KeyRound,
+  UserCircle2,
+  Mail,
+  Phone,
 } from "lucide-react";
 import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
@@ -75,6 +78,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MoreHorizontal } from "lucide-react";
 
 type AdminRole = "super_admin" | "property_manager";
@@ -86,6 +90,15 @@ interface AdminUser {
   displayName: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+interface Customer {
+  id: number;
+  email: string;
+  firstName: string;
+  lastName: string;
+  phone: string | null;
+  createdAt: string;
 }
 
 interface PropertyAssignment {
@@ -149,9 +162,15 @@ export default function Users() {
   const [assignUser, setAssignUser] = useState<AdminUserDetail | null>(null);
   const [assignLoading, setAssignLoading] = useState(false);
 
-  const { data: users = [], isLoading } = useQuery<AdminUser[]>({
+  const { data: users = [], isLoading: isLoadingUsers } = useQuery<AdminUser[]>({
     queryKey: ["admin", "users"],
     queryFn: () => apiRequest("/api/admin/users"),
+    enabled: isSuperAdmin,
+  });
+
+  const { data: customers = [], isLoading: isLoadingCustomers } = useQuery<Customer[]>({
+    queryKey: ["admin", "customers"],
+    queryFn: () => apiRequest("/api/admin/customers"),
     enabled: isSuperAdmin,
   });
 
@@ -235,11 +254,9 @@ export default function Users() {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">
-            User Management
-          </h1>
+          <h1 className="text-3xl font-bold tracking-tight">Utenti</h1>
           <p className="text-muted-foreground">
-            Manage access for your team members.
+            Gestione degli utenti della piattaforma.
           </p>
         </div>
         <Card>
@@ -261,129 +278,232 @@ export default function Users() {
     <div className="space-y-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">
-            User Management
-          </h1>
+          <h1 className="text-3xl font-bold tracking-tight">Utenti</h1>
           <p className="text-muted-foreground">
-            Gestisci gli amministratori e le loro proprietà assegnate.
+            Tutti gli utenti registrati sulla piattaforma.
           </p>
         </div>
         <Button onClick={() => setCreateOpen(true)} className="gap-2">
           <Plus className="h-4 w-4" />
-          Nuovo Utente
+          Nuovo Amministratore
         </Button>
       </div>
 
-      <Card>
-        <CardContent className="p-0">
-          {isLoading ? (
-            <div className="p-6 space-y-3">
-              {[...Array(3)].map((_, i) => (
-                <Skeleton key={i} className="h-12 w-full" />
-              ))}
-            </div>
-          ) : users.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-center">
-              <UsersIcon className="h-12 w-12 text-muted-foreground/40 mb-4" />
-              <p className="text-muted-foreground">
-                Nessun utente trovato. Crea il primo utente.
-              </p>
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Utente</TableHead>
-                  <TableHead>Ruolo</TableHead>
-                  <TableHead className="hidden md:table-cell">
-                    Proprietà assegnate
-                  </TableHead>
-                  <TableHead className="hidden md:table-cell">
-                    Creato
-                  </TableHead>
-                  <TableHead className="w-[60px]" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {users.map((user) => (
-                  <TableRow key={user.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary font-semibold text-sm shrink-0">
-                          {(user.displayName ?? user.username)
-                            .charAt(0)
-                            .toUpperCase()}
-                        </div>
-                        <div>
-                          <p className="font-medium leading-none">
-                            {user.displayName ?? user.username}
-                          </p>
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            @{user.username}
-                          </p>
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <RoleBadge role={user.role} />
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell">
-                      {user.role === "property_manager" ? (
-                        <button
-                          onClick={() => loadUserDetail(user)}
-                          className="text-sm text-muted-foreground hover:text-foreground underline-offset-2 hover:underline transition-colors"
-                        >
-                          Gestisci assegnazioni
-                        </button>
-                      ) : (
-                        <span className="text-sm text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
-                      {format(parseISO(user.createdAt), "dd/MM/yyyy")}
-                    </TableCell>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <MoreHorizontal className="h-4 w-4" />
-                            <span className="sr-only">Azioni</span>
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuLabel>Azioni</DropdownMenuLabel>
-                          <DropdownMenuItem
-                            onClick={() => setEditUser(user)}
-                          >
-                            <Pencil className="h-4 w-4 mr-2" />
-                            Modifica
-                          </DropdownMenuItem>
-                          {user.role === "property_manager" && (
-                            <DropdownMenuItem
+      <Tabs defaultValue="admin">
+        <TabsList className="mb-4">
+          <TabsTrigger value="admin" className="gap-2">
+            <UserCog className="h-4 w-4" />
+            Amministratori
+            {!isLoadingUsers && (
+              <span className="ml-1 rounded-full bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
+                {users.length}
+              </span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="customers" className="gap-2">
+            <UserCircle2 className="h-4 w-4" />
+            Clienti
+            {!isLoadingCustomers && (
+              <span className="ml-1 rounded-full bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
+                {customers.length}
+              </span>
+            )}
+          </TabsTrigger>
+        </TabsList>
+
+        {/* ── Tab: Amministratori ── */}
+        <TabsContent value="admin">
+          <Card>
+            <CardContent className="p-0">
+              {isLoadingUsers ? (
+                <div className="p-6 space-y-3">
+                  {[...Array(3)].map((_, i) => (
+                    <Skeleton key={i} className="h-12 w-full" />
+                  ))}
+                </div>
+              ) : users.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center">
+                  <UsersIcon className="h-12 w-12 text-muted-foreground/40 mb-4" />
+                  <p className="text-muted-foreground">
+                    Nessun utente trovato. Crea il primo utente.
+                  </p>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Utente</TableHead>
+                      <TableHead>Ruolo</TableHead>
+                      <TableHead className="hidden md:table-cell">
+                        Proprietà assegnate
+                      </TableHead>
+                      <TableHead className="hidden md:table-cell">
+                        Registrato
+                      </TableHead>
+                      <TableHead className="w-[60px]" />
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {users.map((user) => (
+                      <TableRow key={user.id}>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary font-semibold text-sm shrink-0">
+                              {(user.displayName ?? user.username)
+                                .charAt(0)
+                                .toUpperCase()}
+                            </div>
+                            <div>
+                              <p className="font-medium leading-none">
+                                {user.displayName ?? user.username}
+                              </p>
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                @{user.username}
+                              </p>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <RoleBadge role={user.role} />
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell">
+                          {user.role === "property_manager" ? (
+                            <button
                               onClick={() => loadUserDetail(user)}
+                              className="text-sm text-muted-foreground hover:text-foreground underline-offset-2 hover:underline transition-colors"
                             >
-                              <Building className="h-4 w-4 mr-2" />
-                              Proprietà assegnate
-                            </DropdownMenuItem>
+                              Gestisci assegnazioni
+                            </button>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">—</span>
                           )}
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            className="text-destructive focus:text-destructive"
-                            onClick={() => setDeleteUser(user)}
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Elimina
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
+                          {format(parseISO(user.createdAt), "dd/MM/yyyy")}
+                        </TableCell>
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8">
+                                <MoreHorizontal className="h-4 w-4" />
+                                <span className="sr-only">Azioni</span>
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuLabel>Azioni</DropdownMenuLabel>
+                              <DropdownMenuItem onClick={() => setEditUser(user)}>
+                                <Pencil className="h-4 w-4 mr-2" />
+                                Modifica
+                              </DropdownMenuItem>
+                              {user.role === "property_manager" && (
+                                <DropdownMenuItem onClick={() => loadUserDetail(user)}>
+                                  <Building className="h-4 w-4 mr-2" />
+                                  Proprietà assegnate
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                className="text-destructive focus:text-destructive"
+                                onClick={() => setDeleteUser(user)}
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Elimina
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ── Tab: Clienti ── */}
+        <TabsContent value="customers">
+          <Card>
+            <CardContent className="p-0">
+              {isLoadingCustomers ? (
+                <div className="p-6 space-y-3">
+                  {[...Array(4)].map((_, i) => (
+                    <Skeleton key={i} className="h-12 w-full" />
+                  ))}
+                </div>
+              ) : customers.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center">
+                  <UserCircle2 className="h-12 w-12 text-muted-foreground/40 mb-4" />
+                  <p className="text-muted-foreground">
+                    Nessun cliente registrato ancora.
+                  </p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    I clienti appaiono qui dopo la registrazione sul sito pubblico.
+                  </p>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Cliente</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead className="hidden md:table-cell">Telefono</TableHead>
+                      <TableHead>Ruolo</TableHead>
+                      <TableHead className="hidden md:table-cell">Registrato</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {customers.map((c) => (
+                      <TableRow key={c.id}>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-muted-foreground font-semibold text-sm shrink-0">
+                              {c.firstName.charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                              <p className="font-medium leading-none">
+                                {c.firstName} {c.lastName}
+                              </p>
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                #{c.id}
+                              </p>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1.5 text-sm">
+                            <Mail className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                            {c.email}
+                          </div>
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
+                          {c.phone ? (
+                            <div className="flex items-center gap-1.5">
+                              <Phone className="h-3.5 w-3.5 shrink-0" />
+                              {c.phone}
+                            </div>
+                          ) : (
+                            <span>—</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="gap-1 text-muted-foreground">
+                            <UserCircle2 className="h-3 w-3" />
+                            Cliente
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
+                          {format(parseISO(c.createdAt), "dd/MM/yyyy")}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       {/* Create user dialog */}
       <CreateUserDialog
@@ -435,9 +555,7 @@ export default function Users() {
       <Sheet open={!!assignUser} onOpenChange={(o) => !o && setAssignUser(null)}>
         <SheetContent className="sm:max-w-md">
           <SheetHeader>
-            <SheetTitle>
-              Proprietà assegnate
-            </SheetTitle>
+            <SheetTitle>Proprietà assegnate</SheetTitle>
             <SheetDescription>
               {assignUser && (
                 <>
@@ -450,7 +568,6 @@ export default function Users() {
 
           {assignUser && (
             <div className="mt-6 space-y-6">
-              {/* Assigned list */}
               <div className="space-y-2">
                 <h4 className="text-sm font-medium">Assegnate</h4>
                 {assignUser.assignments.length === 0 ? (
@@ -485,7 +602,6 @@ export default function Users() {
                 )}
               </div>
 
-              {/* Add property */}
               {(() => {
                 const assignedIds = new Set(
                   assignUser.assignments.map((a) => a.propertyId),
@@ -781,4 +897,3 @@ function EditUserDialog({
     </Dialog>
   );
 }
-

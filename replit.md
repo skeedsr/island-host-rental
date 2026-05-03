@@ -117,6 +117,7 @@ Session-based admin auth (express-session) with **3 roles**:
 - `PUT /api/admin/users/:id` — update user (role, displayName, password)
 - `DELETE /api/admin/users/:id` — delete user (cascades assignments)
 - `GET /api/admin/property-assignments` — list all assignments
+- `GET /api/admin/customers` — list all registered customers/guests (read-only)
 - `POST /api/admin/property-assignments` — assign property to property_manager
 - `DELETE /api/admin/property-assignments/:id` — remove assignment
 

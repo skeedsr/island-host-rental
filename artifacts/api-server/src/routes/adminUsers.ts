@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, adminUsersTable, propertyAssignmentsTable, propertiesTable } from "@workspace/db";
+import { db, adminUsersTable, propertyAssignmentsTable, propertiesTable, customersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { requireSuperAdmin } from "../middlewares/auth";
@@ -42,6 +42,21 @@ router.get("/admin/users", requireSuperAdmin, async (_req, res) => {
     .from(adminUsersTable)
     .orderBy(adminUsersTable.createdAt);
   res.json(users.map(safeUser));
+});
+
+router.get("/admin/customers", requireSuperAdmin, async (_req, res) => {
+  const customers = await db
+    .select({
+      id: customersTable.id,
+      email: customersTable.email,
+      firstName: customersTable.firstName,
+      lastName: customersTable.lastName,
+      phone: customersTable.phone,
+      createdAt: customersTable.createdAt,
+    })
+    .from(customersTable)
+    .orderBy(customersTable.createdAt);
+  res.json(customers);
 });
 
 router.post("/admin/users", requireSuperAdmin, async (req, res) => {
