@@ -13,6 +13,9 @@ import {
   UserCircle2,
   Mail,
   Phone,
+  Home,
+  LinkIcon,
+  Unlink,
 } from "lucide-react";
 import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
@@ -88,6 +91,7 @@ interface AdminUser {
   username: string;
   role: AdminRole;
   displayName: string | null;
+  linkedCustomerId: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -161,6 +165,9 @@ export default function Users() {
   const [deleteUser, setDeleteUser] = useState<AdminUser | null>(null);
   const [assignUser, setAssignUser] = useState<AdminUserDetail | null>(null);
   const [assignLoading, setAssignLoading] = useState(false);
+  const [makeHostCustomer, setMakeHostCustomer] = useState<Customer | null>(null);
+  const [unlinkAdmin, setUnlinkAdmin] = useState<AdminUser | null>(null);
+  const [unlinkLoading, setUnlinkLoading] = useState(false);
 
   const { data: users = [], isLoading: isLoadingUsers } = useQuery<AdminUser[]>({
     queryKey: ["admin", "users"],
@@ -180,8 +187,36 @@ export default function Users() {
     enabled: isSuperAdmin,
   });
 
-  const invalidateUsers = () =>
+  const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
+    queryClient.invalidateQueries({ queryKey: ["admin", "customers"] });
+  };
+  const invalidateUsers = invalidateAll;
+
+  // Map: customerId → admin user linked to it
+  const linkedAdminByCustomerId = new Map<number, AdminUser>(
+    users
+      .filter((u) => u.linkedCustomerId !== null)
+      .map((u) => [u.linkedCustomerId as number, u]),
+  );
+
+  async function handleUnlinkCustomer() {
+    if (!unlinkAdmin) return;
+    setUnlinkLoading(true);
+    try {
+      await apiRequest(`/api/admin/users/${unlinkAdmin.id}`, {
+        method: "PUT",
+        body: JSON.stringify({ linkedCustomerId: null }),
+      });
+      toast.success("Account cliente scollegato");
+      invalidateAll();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setUnlinkLoading(false);
+      setUnlinkAdmin(null);
+    }
+  }
 
   async function loadUserDetail(user: AdminUser) {
     try {
@@ -446,57 +481,90 @@ export default function Users() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Cliente</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead className="hidden md:table-cell">Telefono</TableHead>
-                      <TableHead>Ruolo</TableHead>
+                      <TableHead className="hidden md:table-cell">Email</TableHead>
+                      <TableHead className="hidden lg:table-cell">Telefono</TableHead>
+                      <TableHead>Ruolo / Accesso</TableHead>
                       <TableHead className="hidden md:table-cell">Registrato</TableHead>
+                      <TableHead className="w-[60px]" />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {customers.map((c) => (
-                      <TableRow key={c.id}>
-                        <TableCell>
-                          <div className="flex items-center gap-3">
-                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-muted-foreground font-semibold text-sm shrink-0">
-                              {c.firstName.charAt(0).toUpperCase()}
+                    {customers.map((c) => {
+                      const linkedAdmin = linkedAdminByCustomerId.get(c.id);
+                      return (
+                        <TableRow key={c.id}>
+                          <TableCell>
+                            <div className="flex items-center gap-3">
+                              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-muted-foreground font-semibold text-sm shrink-0">
+                                {c.firstName.charAt(0).toUpperCase()}
+                              </div>
+                              <div>
+                                <p className="font-medium leading-none">
+                                  {c.firstName} {c.lastName}
+                                </p>
+                                <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                                  <Mail className="h-3 w-3 shrink-0" />
+                                  {c.email}
+                                </p>
+                              </div>
                             </div>
-                            <div>
-                              <p className="font-medium leading-none">
-                                {c.firstName} {c.lastName}
-                              </p>
-                              <p className="text-xs text-muted-foreground mt-0.5">
-                                #{c.id}
-                              </p>
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1.5 text-sm">
-                            <Mail className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                          </TableCell>
+                          <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
                             {c.email}
-                          </div>
-                        </TableCell>
-                        <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
-                          {c.phone ? (
-                            <div className="flex items-center gap-1.5">
-                              <Phone className="h-3.5 w-3.5 shrink-0" />
-                              {c.phone}
+                          </TableCell>
+                          <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
+                            {c.phone ? (
+                              <div className="flex items-center gap-1.5">
+                                <Phone className="h-3.5 w-3.5 shrink-0" />
+                                {c.phone}
+                              </div>
+                            ) : (
+                              <span>—</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <Badge variant="outline" className="gap-1 text-muted-foreground">
+                                <UserCircle2 className="h-3 w-3" />
+                                Cliente
+                              </Badge>
+                              {linkedAdmin ? (
+                                <Badge variant="secondary" className="gap-1">
+                                  <Home className="h-3 w-3" />
+                                  Host: @{linkedAdmin.username}
+                                </Badge>
+                              ) : null}
                             </div>
-                          ) : (
-                            <span>—</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="gap-1 text-muted-foreground">
-                            <UserCircle2 className="h-3 w-3" />
-                            Cliente
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
-                          {format(parseISO(c.createdAt), "dd/MM/yyyy")}
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                          </TableCell>
+                          <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
+                            {format(parseISO(c.createdAt), "dd/MM/yyyy")}
+                          </TableCell>
+                          <TableCell>
+                            {linkedAdmin ? (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                title="Scollega account host"
+                                onClick={() => setUnlinkAdmin(linkedAdmin)}
+                              >
+                                <Unlink className="h-4 w-4" />
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 gap-1.5 text-xs"
+                                onClick={() => setMakeHostCustomer(c)}
+                              >
+                                <LinkIcon className="h-3.5 w-3.5" />
+                                Rendi Host
+                              </Button>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               )}
@@ -511,6 +579,46 @@ export default function Users() {
         onOpenChange={setCreateOpen}
         onSuccess={invalidateUsers}
       />
+
+      {/* Make host dialog */}
+      {makeHostCustomer && (
+        <MakeHostDialog
+          customer={makeHostCustomer}
+          open={!!makeHostCustomer}
+          onOpenChange={(o) => !o && setMakeHostCustomer(null)}
+          onSuccess={() => {
+            invalidateAll();
+            setMakeHostCustomer(null);
+          }}
+        />
+      )}
+
+      {/* Unlink host confirmation */}
+      <AlertDialog
+        open={!!unlinkAdmin}
+        onOpenChange={(o) => !o && setUnlinkAdmin(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Scollega account host</AlertDialogTitle>
+            <AlertDialogDescription>
+              Sei sicuro di voler rimuovere il collegamento tra questo cliente e
+              l'account host <strong>@{unlinkAdmin?.username}</strong>? L'account
+              amministratore rimarrà attivo ma separato.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={unlinkLoading}>Annulla</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleUnlinkCustomer}
+              disabled={unlinkLoading}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {unlinkLoading ? "Rimozione..." : "Scollega"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Edit user dialog */}
       {editUser && (
@@ -768,6 +876,141 @@ function CreateUserDialog({
             </Button>
             <Button type="submit" disabled={loading}>
               {loading ? "Creazione..." : "Crea utente"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Make Host Dialog                                                      */
+/* ------------------------------------------------------------------ */
+
+function MakeHostDialog({
+  customer,
+  open,
+  onOpenChange,
+  onSuccess,
+}: {
+  customer: Customer;
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  onSuccess: () => void;
+}) {
+  const defaultUsername = `${customer.firstName.toLowerCase()}.${customer.lastName.toLowerCase()}`.replace(/\s+/g, "");
+  const defaultDisplay = `${customer.firstName} ${customer.lastName}`.trim();
+
+  const [loading, setLoading] = useState(false);
+  const [form, setForm] = useState({
+    username: defaultUsername,
+    displayName: defaultDisplay,
+    password: "",
+  });
+  const [error, setError] = useState("");
+
+  const reset = () => {
+    setForm({ username: defaultUsername, displayName: defaultDisplay, password: "" });
+    setError("");
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    try {
+      // 1. Create the property_manager admin account
+      const newUser = await apiRequest<AdminUser>("/api/admin/users", {
+        method: "POST",
+        body: JSON.stringify({
+          username: form.username,
+          password: form.password,
+          role: "property_manager",
+          displayName: form.displayName || undefined,
+        }),
+      });
+      // 2. Link the customer account to it
+      await apiRequest(`/api/admin/users/${newUser.id}`, {
+        method: "PUT",
+        body: JSON.stringify({ linkedCustomerId: customer.id }),
+      });
+      toast.success(
+        `Account host "@${form.username}" creato e collegato a ${customer.firstName} ${customer.lastName}`,
+      );
+      onSuccess();
+      onOpenChange(false);
+      reset();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) reset(); }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Home className="h-5 w-5" />
+            Aggiungi come Host
+          </DialogTitle>
+          <DialogDescription>
+            Crea un account amministratore per{" "}
+            <strong>{customer.firstName} {customer.lastName}</strong> così potrà
+            gestire proprietà. Il loro account cliente rimane invariato.
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="rounded-md bg-muted/50 border px-3 py-2 text-sm text-muted-foreground flex items-center gap-2">
+            <UserCircle2 className="h-4 w-4 shrink-0" />
+            Cliente: {customer.email}
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="mh-username">Username (per il login admin)</Label>
+            <Input
+              id="mh-username"
+              value={form.username}
+              onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
+              placeholder="mario.rossi"
+              required
+              minLength={3}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="mh-displayName">Nome visualizzato</Label>
+            <Input
+              id="mh-displayName"
+              value={form.displayName}
+              onChange={(e) => setForm((f) => ({ ...f, displayName: e.target.value }))}
+              placeholder="Mario Rossi"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="mh-password">Password admin</Label>
+            <Input
+              id="mh-password"
+              type="password"
+              value={form.password}
+              onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+              placeholder="Minimo 8 caratteri"
+              required
+              minLength={8}
+            />
+          </div>
+          {error && <p className="text-sm text-destructive font-medium">{error}</p>}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => { onOpenChange(false); reset(); }}
+            >
+              Annulla
+            </Button>
+            <Button type="submit" disabled={loading} className="gap-2">
+              <Home className="h-4 w-4" />
+              {loading ? "Creazione..." : "Crea account host"}
             </Button>
           </DialogFooter>
         </form>
