@@ -17,9 +17,32 @@ import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, Plus, Trash2, ImagePlus, GripVertical, Upload, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { usePhotoUpload } from "@/hooks/usePhotoUpload";
+
+interface VacationalForm {
+  enabled: boolean;
+  dailyRate: string;
+}
+
+interface TemporadaForm {
+  enabled: boolean;
+  monthlyRate: string;
+  maxDurationMonths: string;
+  internetIncluded: boolean;
+  electricityIncluded: boolean;
+  waterIncluded: boolean;
+  communityFeesIncluded: boolean;
+}
+
+interface RentalTypesForm {
+  vacational: VacationalForm;
+  mediaTemporada: TemporadaForm;
+  largaTemporada: TemporadaForm;
+}
 
 interface FormValues {
   name: string;
@@ -31,7 +54,18 @@ interface FormValues {
   max_guests: string;
   photos: string[];
   icalImportUrls: string[];
+  rentalTypes: RentalTypesForm;
 }
+
+const DEFAULT_TEMPORADA: TemporadaForm = {
+  enabled: false,
+  monthlyRate: "",
+  maxDurationMonths: "6",
+  internetIncluded: false,
+  electricityIncluded: false,
+  waterIncluded: false,
+  communityFeesIncluded: false,
+};
 
 const EMPTY_FORM: FormValues = {
   name: "",
@@ -43,6 +77,11 @@ const EMPTY_FORM: FormValues = {
   max_guests: "",
   photos: [],
   icalImportUrls: [],
+  rentalTypes: {
+    vacational: { enabled: true, dailyRate: "" },
+    mediaTemporada: { ...DEFAULT_TEMPORADA },
+    largaTemporada: { ...DEFAULT_TEMPORADA },
+  },
 };
 
 export default function PropertyFormPage() {
@@ -79,6 +118,7 @@ export default function PropertyFormPage() {
 
   useEffect(() => {
     if (existing) {
+      const rt = existing.rentalTypes as RentalTypesForm | null | undefined;
       setForm({
         name: existing.name ?? "",
         location: existing.location ?? "",
@@ -89,12 +129,47 @@ export default function PropertyFormPage() {
         max_guests: existing.max_guests != null ? String(existing.max_guests) : "",
         photos: existing.photos ?? [],
         icalImportUrls: existing.icalImportUrls ?? [],
+        rentalTypes: {
+          vacational: {
+            enabled: rt?.vacational?.enabled ?? true,
+            dailyRate: rt?.vacational?.dailyRate != null
+              ? String(rt.vacational.dailyRate)
+              : existing.nightly_rate != null ? String(existing.nightly_rate) : "",
+          },
+          mediaTemporada: {
+            enabled: rt?.mediaTemporada?.enabled ?? false,
+            monthlyRate: rt?.mediaTemporada?.monthlyRate != null ? String(rt.mediaTemporada.monthlyRate) : "",
+            maxDurationMonths: rt?.mediaTemporada?.maxDurationMonths != null ? String(rt.mediaTemporada.maxDurationMonths) : "6",
+            internetIncluded: rt?.mediaTemporada?.internetIncluded ?? false,
+            electricityIncluded: rt?.mediaTemporada?.electricityIncluded ?? false,
+            waterIncluded: rt?.mediaTemporada?.waterIncluded ?? false,
+            communityFeesIncluded: rt?.mediaTemporada?.communityFeesIncluded ?? false,
+          },
+          largaTemporada: {
+            enabled: rt?.largaTemporada?.enabled ?? false,
+            monthlyRate: rt?.largaTemporada?.monthlyRate != null ? String(rt.largaTemporada.monthlyRate) : "",
+            maxDurationMonths: "6",
+            internetIncluded: rt?.largaTemporada?.internetIncluded ?? false,
+            electricityIncluded: rt?.largaTemporada?.electricityIncluded ?? false,
+            waterIncluded: rt?.largaTemporada?.waterIncluded ?? false,
+            communityFeesIncluded: rt?.largaTemporada?.communityFeesIncluded ?? false,
+          },
+        },
       });
     }
   }, [existing]);
 
   const set = (key: keyof FormValues, value: FormValues[keyof FormValues]) =>
     setForm((f) => ({ ...f, [key]: value }));
+
+  const setVacational = (patch: Partial<VacationalForm>) =>
+    setForm((f) => ({ ...f, rentalTypes: { ...f.rentalTypes, vacational: { ...f.rentalTypes.vacational, ...patch } } }));
+
+  const setMediaTemporada = (patch: Partial<TemporadaForm>) =>
+    setForm((f) => ({ ...f, rentalTypes: { ...f.rentalTypes, mediaTemporada: { ...f.rentalTypes.mediaTemporada, ...patch } } }));
+
+  const setLargaTemporada = (patch: Partial<TemporadaForm>) =>
+    setForm((f) => ({ ...f, rentalTypes: { ...f.rentalTypes, largaTemporada: { ...f.rentalTypes.largaTemporada, ...patch } } }));
 
   const removePhoto = (idx: number) =>
     set("photos", form.photos.filter((_, i) => i !== idx));
@@ -138,7 +213,41 @@ export default function PropertyFormPage() {
       return "Inserisci una tariffa notturna valida";
     if (!form.max_guests || isNaN(Number(form.max_guests)) || Number(form.max_guests) < 1)
       return "Inserisci un numero ospiti valido";
+    const rt = form.rentalTypes;
+    if (rt.vacational.enabled && (rt.vacational.dailyRate === "" || isNaN(Number(rt.vacational.dailyRate))))
+      return "Inserisci una tariffa giornaliera valida per Vacational";
+    if (rt.mediaTemporada.enabled && (rt.mediaTemporada.monthlyRate === "" || isNaN(Number(rt.mediaTemporada.monthlyRate))))
+      return "Inserisci una tariffa mensile valida per Media Temporada";
+    if (rt.largaTemporada.enabled && (rt.largaTemporada.monthlyRate === "" || isNaN(Number(rt.largaTemporada.monthlyRate))))
+      return "Inserisci una tariffa mensile valida per Larga Temporada";
     return null;
+  };
+
+  const buildRentalTypes = () => {
+    const rt = form.rentalTypes;
+    return {
+      vacational: rt.vacational.enabled ? {
+        enabled: true,
+        dailyRate: Number(rt.vacational.dailyRate),
+      } : undefined,
+      mediaTemporada: rt.mediaTemporada.enabled ? {
+        enabled: true,
+        monthlyRate: Number(rt.mediaTemporada.monthlyRate),
+        maxDurationMonths: Number(rt.mediaTemporada.maxDurationMonths) || 6,
+        internetIncluded: rt.mediaTemporada.internetIncluded,
+        electricityIncluded: rt.mediaTemporada.electricityIncluded,
+        waterIncluded: rt.mediaTemporada.waterIncluded,
+        communityFeesIncluded: rt.mediaTemporada.communityFeesIncluded,
+      } : undefined,
+      largaTemporada: rt.largaTemporada.enabled ? {
+        enabled: true,
+        monthlyRate: Number(rt.largaTemporada.monthlyRate),
+        internetIncluded: rt.largaTemporada.internetIncluded,
+        electricityIncluded: rt.largaTemporada.electricityIncluded,
+        waterIncluded: rt.largaTemporada.waterIncluded,
+        communityFeesIncluded: rt.largaTemporada.communityFeesIncluded,
+      } : undefined,
+    };
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -158,6 +267,7 @@ export default function PropertyFormPage() {
         max_guests: Math.round(Number(form.max_guests)),
         photos: form.photos,
         icalImportUrls: form.icalImportUrls,
+        rentalTypes: buildRentalTypes(),
       };
 
       if (isEdit) {
@@ -314,6 +424,193 @@ export default function PropertyFormPage() {
           </CardContent>
         </Card>
 
+        {/* Tipologie di affitto */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Tipologie di affitto</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+
+            {/* Vacational */}
+            <div className="rounded-lg border overflow-hidden">
+              <div
+                className="flex items-center justify-between p-4 cursor-pointer hover:bg-muted/30 transition-colors"
+                onClick={() => setVacational({ enabled: !form.rentalTypes.vacational.enabled })}
+              >
+                <div className="flex items-center gap-3">
+                  <Switch
+                    checked={form.rentalTypes.vacational.enabled}
+                    onCheckedChange={(v) => setVacational({ enabled: v })}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                  <div>
+                    <p className="font-medium text-sm">Vacacional</p>
+                    <p className="text-xs text-muted-foreground">Affitto turistico a breve termine</p>
+                  </div>
+                </div>
+                {form.rentalTypes.vacational.enabled && (
+                  <Badge variant="secondary" className="text-xs">Attivo</Badge>
+                )}
+              </div>
+              {form.rentalTypes.vacational.enabled && (
+                <div className="px-4 pb-4 pt-2 border-t bg-muted/10 space-y-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="vac_dailyRate">Tariffa giornaliera (€)</Label>
+                    <Input
+                      id="vac_dailyRate"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="120"
+                      value={form.rentalTypes.vacational.dailyRate}
+                      onChange={(e) => setVacational({ dailyRate: e.target.value })}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Media Temporada */}
+            <div className="rounded-lg border overflow-hidden">
+              <div
+                className="flex items-center justify-between p-4 cursor-pointer hover:bg-muted/30 transition-colors"
+                onClick={() => setMediaTemporada({ enabled: !form.rentalTypes.mediaTemporada.enabled })}
+              >
+                <div className="flex items-center gap-3">
+                  <Switch
+                    checked={form.rentalTypes.mediaTemporada.enabled}
+                    onCheckedChange={(v) => setMediaTemporada({ enabled: v })}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                  <div>
+                    <p className="font-medium text-sm">Media Temporada</p>
+                    <p className="text-xs text-muted-foreground">Affitto medio termine, fino a 6 mesi</p>
+                  </div>
+                </div>
+                {form.rentalTypes.mediaTemporada.enabled && (
+                  <Badge variant="secondary" className="text-xs">Attivo</Badge>
+                )}
+              </div>
+              {form.rentalTypes.mediaTemporada.enabled && (
+                <div className="px-4 pb-4 pt-2 border-t bg-muted/10 space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="mt_monthlyRate">Tariffa mensile (€)</Label>
+                      <Input
+                        id="mt_monthlyRate"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="800"
+                        value={form.rentalTypes.mediaTemporada.monthlyRate}
+                        onChange={(e) => setMediaTemporada({ monthlyRate: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="mt_maxDuration">Durata massima</Label>
+                      <Select
+                        value={form.rentalTypes.mediaTemporada.maxDurationMonths}
+                        onValueChange={(v) => setMediaTemporada({ maxDurationMonths: v })}
+                      >
+                        <SelectTrigger id="mt_maxDuration">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {[1, 2, 3, 4, 5, 6].map((n) => (
+                            <SelectItem key={n} value={String(n)}>
+                              {n} {n === 1 ? "mese" : "mesi"}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Spese incluse</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {([
+                        ["internetIncluded", "Internet"],
+                        ["electricityIncluded", "Luce"],
+                        ["waterIncluded", "Acqua"],
+                        ["communityFeesIncluded", "Spese comunità"],
+                      ] as [keyof TemporadaForm, string][]).map(([field, label]) => (
+                        <div key={field} className="flex items-center gap-2">
+                          <Checkbox
+                            id={`mt_${field}`}
+                            checked={!!form.rentalTypes.mediaTemporada[field]}
+                            onCheckedChange={(v) => setMediaTemporada({ [field]: !!v })}
+                          />
+                          <Label htmlFor={`mt_${field}`} className="text-sm font-normal cursor-pointer">{label}</Label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Larga Temporada */}
+            <div className="rounded-lg border overflow-hidden">
+              <div
+                className="flex items-center justify-between p-4 cursor-pointer hover:bg-muted/30 transition-colors"
+                onClick={() => setLargaTemporada({ enabled: !form.rentalTypes.largaTemporada.enabled })}
+              >
+                <div className="flex items-center gap-3">
+                  <Switch
+                    checked={form.rentalTypes.largaTemporada.enabled}
+                    onCheckedChange={(v) => setLargaTemporada({ enabled: v })}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                  <div>
+                    <p className="font-medium text-sm">Larga Temporada</p>
+                    <p className="text-xs text-muted-foreground">Affitto a lungo termine, oltre 6 mesi</p>
+                  </div>
+                </div>
+                {form.rentalTypes.largaTemporada.enabled && (
+                  <Badge variant="secondary" className="text-xs">Attivo</Badge>
+                )}
+              </div>
+              {form.rentalTypes.largaTemporada.enabled && (
+                <div className="px-4 pb-4 pt-2 border-t bg-muted/10 space-y-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="lt_monthlyRate">Tariffa mensile (€)</Label>
+                    <Input
+                      id="lt_monthlyRate"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="600"
+                      value={form.rentalTypes.largaTemporada.monthlyRate}
+                      onChange={(e) => setLargaTemporada({ monthlyRate: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Spese incluse</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {([
+                        ["internetIncluded", "Internet"],
+                        ["electricityIncluded", "Luce"],
+                        ["waterIncluded", "Acqua"],
+                        ["communityFeesIncluded", "Spese comunità"],
+                      ] as [keyof TemporadaForm, string][]).map(([field, label]) => (
+                        <div key={field} className="flex items-center gap-2">
+                          <Checkbox
+                            id={`lt_${field}`}
+                            checked={!!form.rentalTypes.largaTemporada[field]}
+                            onCheckedChange={(v) => setLargaTemporada({ [field]: !!v })}
+                          />
+                          <Label htmlFor={`lt_${field}`} className="text-sm font-normal cursor-pointer">{label}</Label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+          </CardContent>
+        </Card>
+
         {/* Foto */}
         <Card>
           <CardHeader>
@@ -326,7 +623,6 @@ export default function PropertyFormPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Hidden file input */}
             <input
               ref={fileInputRef}
               type="file"
@@ -336,7 +632,6 @@ export default function PropertyFormPage() {
               onChange={handleFileChange}
             />
 
-            {/* Upload progress */}
             {isUploading && (
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between text-sm">
@@ -350,7 +645,6 @@ export default function PropertyFormPage() {
               </div>
             )}
 
-            {/* Photo grid */}
             {form.photos.length > 0 && (
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {form.photos.map((url, idx) => (
@@ -364,13 +658,11 @@ export default function PropertyFormPage() {
                           "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='60' viewBox='0 0 100 60'%3E%3Crect width='100' height='60' fill='%23f1f5f9'/%3E%3Ctext x='50' y='35' text-anchor='middle' fill='%2394a3b8' font-size='10'%3EErrore%3C/text%3E%3C/svg%3E";
                       }}
                     />
-                    {/* Cover badge */}
                     {idx === 0 && (
                       <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-primary text-white shadow">
                         Copertina
                       </span>
                     )}
-                    {/* Controls bar */}
                     <div className="flex items-center justify-between bg-background/95 border-t px-1 py-0.5 gap-0.5">
                       <div className="flex gap-0.5">
                         <button
@@ -409,7 +701,6 @@ export default function PropertyFormPage() {
               </div>
             )}
 
-            {/* Drop zone / upload button */}
             <button
               type="button"
               disabled={isUploading}

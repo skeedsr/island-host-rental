@@ -9,6 +9,31 @@ export interface HealthStatus {
   status: string;
 }
 
+export interface VacationalConfig {
+  enabled: boolean;
+  dailyRate: number;
+}
+
+export interface TemporadaConfig {
+  enabled: boolean;
+  monthlyRate: number;
+  /**
+   * @minimum 1
+   * @maximum 6
+   */
+  maxDurationMonths?: number;
+  internetIncluded: boolean;
+  electricityIncluded: boolean;
+  waterIncluded: boolean;
+  communityFeesIncluded: boolean;
+}
+
+export interface RentalTypes {
+  vacational?: VacationalConfig;
+  mediaTemporada?: TemporadaConfig;
+  largaTemporada?: TemporadaConfig;
+}
+
 export interface Property {
   id: number;
   name: string;
@@ -21,6 +46,7 @@ export interface Property {
   photos: string[];
   icalImportUrls: string[];
   icalExportToken: string;
+  rentalTypes?: RentalTypes;
   lastSyncAt?: string | null;
   syncStatus?: string | null;
   createdAt: string;
@@ -37,6 +63,7 @@ export interface CreatePropertyBody {
   max_guests: number;
   photos?: string[];
   icalImportUrls?: string[];
+  rentalTypes?: RentalTypes;
 }
 
 export interface Booking {

@@ -29,13 +29,14 @@ function mapProperty(p: typeof propertiesTable.$inferSelect) {
     icalImportUrls: p.icalImportUrls ?? [],
     nightly_rate: p.nightlyRate,
     max_guests: p.maxGuests,
+    rentalTypes: p.rentalTypes ?? null,
   };
 }
 
 router.get("/properties", async (req, res) => {
   const assignedIds = await getAssignedPropertyIds(req);
 
-  let properties;
+  let properties: (typeof propertiesTable.$inferSelect)[] = [];
   if (assignedIds === null) {
     properties = await db
       .select()
@@ -77,6 +78,7 @@ router.post("/properties", requireAdmin, async (req, res) => {
       photos: data.photos ?? [],
       icalImportUrls: data.icalImportUrls ?? [],
       icalExportToken: token,
+      rentalTypes: data.rentalTypes ?? null,
     })
     .returning();
 
@@ -149,6 +151,7 @@ router.put("/properties/:id", requireAdmin, async (req, res) => {
   if (data.photos !== undefined) updateData.photos = data.photos;
   if (data.icalImportUrls !== undefined)
     updateData.icalImportUrls = data.icalImportUrls;
+  if (data.rentalTypes !== undefined) updateData.rentalTypes = data.rentalTypes;
 
   const [updated] = await db
     .update(propertiesTable)

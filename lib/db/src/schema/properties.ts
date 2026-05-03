@@ -1,6 +1,27 @@
-import { pgTable, serial, text, boolean, real, integer, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, boolean, real, integer, timestamp, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+
+export interface VacationalConfig {
+  enabled: boolean;
+  dailyRate: number;
+}
+
+export interface TemporadaConfig {
+  enabled: boolean;
+  monthlyRate: number;
+  maxDurationMonths?: number;
+  internetIncluded: boolean;
+  electricityIncluded: boolean;
+  waterIncluded: boolean;
+  communityFeesIncluded: boolean;
+}
+
+export interface RentalTypes {
+  vacational?: VacationalConfig;
+  mediaTemporada?: TemporadaConfig;
+  largaTemporada?: TemporadaConfig;
+}
 
 export const propertiesTable = pgTable("properties", {
   id: serial("id").primaryKey(),
@@ -14,6 +35,7 @@ export const propertiesTable = pgTable("properties", {
   photos: text("photos").array().notNull().default([]),
   icalImportUrls: text("ical_import_urls").array().notNull().default([]),
   icalExportToken: text("ical_export_token").notNull(),
+  rentalTypes: jsonb("rental_types").$type<RentalTypes>(),
   lastSyncAt: timestamp("last_sync_at"),
   syncStatus: text("sync_status"),
   createdAt: timestamp("created_at").notNull().defaultNow(),

@@ -46,6 +46,10 @@ export const HealthCheckResponse = zod.object({
 /**
  * @summary List all properties
  */
+export const listPropertiesResponseRentalTypesMediaTemporadaMaxDurationMonthsMax = 6;
+
+export const listPropertiesResponseRentalTypesLargaTemporadaMaxDurationMonthsMax = 6;
+
 export const ListPropertiesResponseItem = zod.object({
   id: zod.number(),
   name: zod.string(),
@@ -58,6 +62,50 @@ export const ListPropertiesResponseItem = zod.object({
   photos: zod.array(zod.string()),
   icalImportUrls: zod.array(zod.string()),
   icalExportToken: zod.string(),
+  rentalTypes: zod
+    .object({
+      vacational: zod
+        .object({
+          enabled: zod.boolean(),
+          dailyRate: zod.number(),
+        })
+        .optional(),
+      mediaTemporada: zod
+        .object({
+          enabled: zod.boolean(),
+          monthlyRate: zod.number(),
+          maxDurationMonths: zod
+            .number()
+            .min(1)
+            .max(
+              listPropertiesResponseRentalTypesMediaTemporadaMaxDurationMonthsMax,
+            )
+            .optional(),
+          internetIncluded: zod.boolean(),
+          electricityIncluded: zod.boolean(),
+          waterIncluded: zod.boolean(),
+          communityFeesIncluded: zod.boolean(),
+        })
+        .optional(),
+      largaTemporada: zod
+        .object({
+          enabled: zod.boolean(),
+          monthlyRate: zod.number(),
+          maxDurationMonths: zod
+            .number()
+            .min(1)
+            .max(
+              listPropertiesResponseRentalTypesLargaTemporadaMaxDurationMonthsMax,
+            )
+            .optional(),
+          internetIncluded: zod.boolean(),
+          electricityIncluded: zod.boolean(),
+          waterIncluded: zod.boolean(),
+          communityFeesIncluded: zod.boolean(),
+        })
+        .optional(),
+    })
+    .optional(),
   lastSyncAt: zod.string().nullish(),
   syncStatus: zod.string().nullish(),
   createdAt: zod.string(),
@@ -68,6 +116,10 @@ export const ListPropertiesResponse = zod.array(ListPropertiesResponseItem);
 /**
  * @summary Create a property
  */
+export const createPropertyBodyRentalTypesMediaTemporadaMaxDurationMonthsMax = 6;
+
+export const createPropertyBodyRentalTypesLargaTemporadaMaxDurationMonthsMax = 6;
+
 export const CreatePropertyBody = zod.object({
   name: zod.string(),
   location: zod.string(),
@@ -78,6 +130,50 @@ export const CreatePropertyBody = zod.object({
   max_guests: zod.number(),
   photos: zod.array(zod.string()).optional(),
   icalImportUrls: zod.array(zod.string()).optional(),
+  rentalTypes: zod
+    .object({
+      vacational: zod
+        .object({
+          enabled: zod.boolean(),
+          dailyRate: zod.number(),
+        })
+        .optional(),
+      mediaTemporada: zod
+        .object({
+          enabled: zod.boolean(),
+          monthlyRate: zod.number(),
+          maxDurationMonths: zod
+            .number()
+            .min(1)
+            .max(
+              createPropertyBodyRentalTypesMediaTemporadaMaxDurationMonthsMax,
+            )
+            .optional(),
+          internetIncluded: zod.boolean(),
+          electricityIncluded: zod.boolean(),
+          waterIncluded: zod.boolean(),
+          communityFeesIncluded: zod.boolean(),
+        })
+        .optional(),
+      largaTemporada: zod
+        .object({
+          enabled: zod.boolean(),
+          monthlyRate: zod.number(),
+          maxDurationMonths: zod
+            .number()
+            .min(1)
+            .max(
+              createPropertyBodyRentalTypesLargaTemporadaMaxDurationMonthsMax,
+            )
+            .optional(),
+          internetIncluded: zod.boolean(),
+          electricityIncluded: zod.boolean(),
+          waterIncluded: zod.boolean(),
+          communityFeesIncluded: zod.boolean(),
+        })
+        .optional(),
+    })
+    .optional(),
 });
 
 /**
@@ -86,6 +182,10 @@ export const CreatePropertyBody = zod.object({
 export const GetPropertyParams = zod.object({
   id: zod.coerce.number(),
 });
+
+export const getPropertyResponseRentalTypesMediaTemporadaMaxDurationMonthsMax = 6;
+
+export const getPropertyResponseRentalTypesLargaTemporadaMaxDurationMonthsMax = 6;
 
 export const GetPropertyResponse = zod.object({
   id: zod.number(),
@@ -99,6 +199,50 @@ export const GetPropertyResponse = zod.object({
   photos: zod.array(zod.string()),
   icalImportUrls: zod.array(zod.string()),
   icalExportToken: zod.string(),
+  rentalTypes: zod
+    .object({
+      vacational: zod
+        .object({
+          enabled: zod.boolean(),
+          dailyRate: zod.number(),
+        })
+        .optional(),
+      mediaTemporada: zod
+        .object({
+          enabled: zod.boolean(),
+          monthlyRate: zod.number(),
+          maxDurationMonths: zod
+            .number()
+            .min(1)
+            .max(
+              getPropertyResponseRentalTypesMediaTemporadaMaxDurationMonthsMax,
+            )
+            .optional(),
+          internetIncluded: zod.boolean(),
+          electricityIncluded: zod.boolean(),
+          waterIncluded: zod.boolean(),
+          communityFeesIncluded: zod.boolean(),
+        })
+        .optional(),
+      largaTemporada: zod
+        .object({
+          enabled: zod.boolean(),
+          monthlyRate: zod.number(),
+          maxDurationMonths: zod
+            .number()
+            .min(1)
+            .max(
+              getPropertyResponseRentalTypesLargaTemporadaMaxDurationMonthsMax,
+            )
+            .optional(),
+          internetIncluded: zod.boolean(),
+          electricityIncluded: zod.boolean(),
+          waterIncluded: zod.boolean(),
+          communityFeesIncluded: zod.boolean(),
+        })
+        .optional(),
+    })
+    .optional(),
   lastSyncAt: zod.string().nullish(),
   syncStatus: zod.string().nullish(),
   createdAt: zod.string(),
@@ -112,6 +256,10 @@ export const UpdatePropertyParams = zod.object({
   id: zod.coerce.number(),
 });
 
+export const updatePropertyBodyRentalTypesMediaTemporadaMaxDurationMonthsMax = 6;
+
+export const updatePropertyBodyRentalTypesLargaTemporadaMaxDurationMonthsMax = 6;
+
 export const UpdatePropertyBody = zod.object({
   name: zod.string(),
   location: zod.string(),
@@ -122,7 +270,55 @@ export const UpdatePropertyBody = zod.object({
   max_guests: zod.number(),
   photos: zod.array(zod.string()).optional(),
   icalImportUrls: zod.array(zod.string()).optional(),
+  rentalTypes: zod
+    .object({
+      vacational: zod
+        .object({
+          enabled: zod.boolean(),
+          dailyRate: zod.number(),
+        })
+        .optional(),
+      mediaTemporada: zod
+        .object({
+          enabled: zod.boolean(),
+          monthlyRate: zod.number(),
+          maxDurationMonths: zod
+            .number()
+            .min(1)
+            .max(
+              updatePropertyBodyRentalTypesMediaTemporadaMaxDurationMonthsMax,
+            )
+            .optional(),
+          internetIncluded: zod.boolean(),
+          electricityIncluded: zod.boolean(),
+          waterIncluded: zod.boolean(),
+          communityFeesIncluded: zod.boolean(),
+        })
+        .optional(),
+      largaTemporada: zod
+        .object({
+          enabled: zod.boolean(),
+          monthlyRate: zod.number(),
+          maxDurationMonths: zod
+            .number()
+            .min(1)
+            .max(
+              updatePropertyBodyRentalTypesLargaTemporadaMaxDurationMonthsMax,
+            )
+            .optional(),
+          internetIncluded: zod.boolean(),
+          electricityIncluded: zod.boolean(),
+          waterIncluded: zod.boolean(),
+          communityFeesIncluded: zod.boolean(),
+        })
+        .optional(),
+    })
+    .optional(),
 });
+
+export const updatePropertyResponseRentalTypesMediaTemporadaMaxDurationMonthsMax = 6;
+
+export const updatePropertyResponseRentalTypesLargaTemporadaMaxDurationMonthsMax = 6;
 
 export const UpdatePropertyResponse = zod.object({
   id: zod.number(),
@@ -136,6 +332,50 @@ export const UpdatePropertyResponse = zod.object({
   photos: zod.array(zod.string()),
   icalImportUrls: zod.array(zod.string()),
   icalExportToken: zod.string(),
+  rentalTypes: zod
+    .object({
+      vacational: zod
+        .object({
+          enabled: zod.boolean(),
+          dailyRate: zod.number(),
+        })
+        .optional(),
+      mediaTemporada: zod
+        .object({
+          enabled: zod.boolean(),
+          monthlyRate: zod.number(),
+          maxDurationMonths: zod
+            .number()
+            .min(1)
+            .max(
+              updatePropertyResponseRentalTypesMediaTemporadaMaxDurationMonthsMax,
+            )
+            .optional(),
+          internetIncluded: zod.boolean(),
+          electricityIncluded: zod.boolean(),
+          waterIncluded: zod.boolean(),
+          communityFeesIncluded: zod.boolean(),
+        })
+        .optional(),
+      largaTemporada: zod
+        .object({
+          enabled: zod.boolean(),
+          monthlyRate: zod.number(),
+          maxDurationMonths: zod
+            .number()
+            .min(1)
+            .max(
+              updatePropertyResponseRentalTypesLargaTemporadaMaxDurationMonthsMax,
+            )
+            .optional(),
+          internetIncluded: zod.boolean(),
+          electricityIncluded: zod.boolean(),
+          waterIncluded: zod.boolean(),
+          communityFeesIncluded: zod.boolean(),
+        })
+        .optional(),
+    })
+    .optional(),
   lastSyncAt: zod.string().nullish(),
   syncStatus: zod.string().nullish(),
   createdAt: zod.string(),

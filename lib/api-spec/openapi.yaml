@@ -388,6 +388,54 @@ components:
       required:
         - status
 
+    VacationalConfig:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        dailyRate:
+          type: number
+      required:
+        - enabled
+        - dailyRate
+
+    TemporadaConfig:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        monthlyRate:
+          type: number
+        maxDurationMonths:
+          type: integer
+          minimum: 1
+          maximum: 6
+        internetIncluded:
+          type: boolean
+        electricityIncluded:
+          type: boolean
+        waterIncluded:
+          type: boolean
+        communityFeesIncluded:
+          type: boolean
+      required:
+        - enabled
+        - monthlyRate
+        - internetIncluded
+        - electricityIncluded
+        - waterIncluded
+        - communityFeesIncluded
+
+    RentalTypes:
+      type: object
+      properties:
+        vacational:
+          $ref: "#/components/schemas/VacationalConfig"
+        mediaTemporada:
+          $ref: "#/components/schemas/TemporadaConfig"
+        largaTemporada:
+          $ref: "#/components/schemas/TemporadaConfig"
+
     Property:
       type: object
       properties:
@@ -417,6 +465,8 @@ components:
             type: string
         icalExportToken:
           type: string
+        rentalTypes:
+          $ref: "#/components/schemas/RentalTypes"
         lastSyncAt:
           type: string
           nullable: true
@@ -466,6 +516,8 @@ components:
           type: array
           items:
             type: string
+        rentalTypes:
+          $ref: "#/components/schemas/RentalTypes"
       required:
         - name
         - location
