@@ -1,6 +1,8 @@
 import { Router } from "express";
-import { db, adminUsersTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import bcrypt from "bcryptjs";
+import { db, adminUsersTable, customersTable } from "@workspace/db";
+import { and, eq, isNotNull } from "drizzle-orm";
+import type { AdminRole } from "@workspace/db";
 import { hashPassword, verifyPassword } from "../lib/password";
 
 const router = Router();
@@ -41,28 +43,52 @@ router.post("/auth/login", async (req, res) => {
 
   await seedSuperAdminIfNeeded(process.env.ADMIN_USERNAME || "admin", adminPassword);
 
-  const [user] = await db
+  // 1. Try username-based login against admin_users (existing system accounts)
+  const [adminUser] = await db
     .select()
     .from(adminUsersTable)
     .where(eq(adminUsersTable.username, username));
 
-  if (!user) {
-    res.status(401).json({ error: "Username o password non corretti" });
+  if (adminUser) {
+    const valid = await verifyPassword(password, adminUser.passwordHash);
+    if (!valid) {
+      res.status(401).json({ error: "Username o password non corretti" });
+      return;
+    }
+    req.session.isAdmin = true;
+    req.session.adminUserId = adminUser.id;
+    req.session.adminUsername = adminUser.username;
+    req.session.adminRole = adminUser.role;
+    res.json({ ok: true, role: adminUser.role, username: adminUser.username });
     return;
   }
 
-  const valid = await verifyPassword(password, user.passwordHash);
-  if (!valid) {
-    res.status(401).json({ error: "Username o password non corretti" });
+  // 2. Try email-based login against customers with admin_role set
+  const [customer] = await db
+    .select()
+    .from(customersTable)
+    .where(
+      and(
+        eq(customersTable.email, username.toLowerCase()),
+        isNotNull(customersTable.adminRole),
+      ),
+    );
+
+  if (customer && customer.adminRole) {
+    const valid = await bcrypt.compare(password, customer.passwordHash);
+    if (!valid) {
+      res.status(401).json({ error: "Username o password non corretti" });
+      return;
+    }
+    req.session.isAdmin = true;
+    req.session.customerId = customer.id;
+    req.session.adminUsername = customer.email;
+    req.session.adminRole = customer.adminRole as AdminRole;
+    res.json({ ok: true, role: customer.adminRole, username: customer.email });
     return;
   }
 
-  req.session.isAdmin = true;
-  req.session.adminUserId = user.id;
-  req.session.adminUsername = user.username;
-  req.session.adminRole = user.role;
-
-  res.json({ ok: true, role: user.role, username: user.username });
+  res.status(401).json({ error: "Username o password non corretti" });
 });
 
 router.post("/auth/logout", (req, res) => {
@@ -79,6 +105,7 @@ router.get("/auth/me", (req, res) => {
       role: req.session.adminRole,
       username: req.session.adminUsername,
       userId: req.session.adminUserId,
+      customerId: req.session.customerId,
     });
   } else {
     res.status(401).json({ error: "Not authenticated" });

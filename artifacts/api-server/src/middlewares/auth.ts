@@ -32,17 +32,36 @@ export async function canAccessProperty(
 ): Promise<boolean> {
   if (!req.session?.isAdmin) return false;
   if (req.session.adminRole === "super_admin") return true;
-  if (!req.session.adminUserId) return false;
-  const [assignment] = await db
-    .select()
-    .from(propertyAssignmentsTable)
-    .where(
-      and(
-        eq(propertyAssignmentsTable.adminUserId, req.session.adminUserId),
-        eq(propertyAssignmentsTable.propertyId, propertyId),
-      ),
-    );
-  return !!assignment;
+
+  // System admin account (admin_users-based session)
+  if (req.session.adminUserId) {
+    const [assignment] = await db
+      .select()
+      .from(propertyAssignmentsTable)
+      .where(
+        and(
+          eq(propertyAssignmentsTable.adminUserId, req.session.adminUserId),
+          eq(propertyAssignmentsTable.propertyId, propertyId),
+        ),
+      );
+    return !!assignment;
+  }
+
+  // Customer-based admin session (customer with adminRole)
+  if (req.session.customerId) {
+    const [assignment] = await db
+      .select()
+      .from(propertyAssignmentsTable)
+      .where(
+        and(
+          eq(propertyAssignmentsTable.customerId, req.session.customerId),
+          eq(propertyAssignmentsTable.propertyId, propertyId),
+        ),
+      );
+    return !!assignment;
+  }
+
+  return false;
 }
 
 export async function getAssignedPropertyIds(
@@ -50,10 +69,24 @@ export async function getAssignedPropertyIds(
 ): Promise<number[] | null> {
   if (!req.session?.isAdmin) return null;
   if (req.session.adminRole === "super_admin") return null;
-  if (!req.session.adminUserId) return [];
-  const assignments = await db
-    .select({ propertyId: propertyAssignmentsTable.propertyId })
-    .from(propertyAssignmentsTable)
-    .where(eq(propertyAssignmentsTable.adminUserId, req.session.adminUserId));
-  return assignments.map((a) => a.propertyId);
+
+  // System admin account
+  if (req.session.adminUserId) {
+    const assignments = await db
+      .select({ propertyId: propertyAssignmentsTable.propertyId })
+      .from(propertyAssignmentsTable)
+      .where(eq(propertyAssignmentsTable.adminUserId, req.session.adminUserId));
+    return assignments.map((a) => a.propertyId);
+  }
+
+  // Customer-based admin session
+  if (req.session.customerId) {
+    const assignments = await db
+      .select({ propertyId: propertyAssignmentsTable.propertyId })
+      .from(propertyAssignmentsTable)
+      .where(eq(propertyAssignmentsTable.customerId, req.session.customerId));
+    return assignments.map((a) => a.propertyId);
+  }
+
+  return [];
 }

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
-import { db, customersTable, adminUsersTable } from "@workspace/db";
+import { db, customersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 
@@ -51,6 +51,7 @@ router.post("/customer/register", async (req, res) => {
     firstName: customer.firstName,
     lastName: customer.lastName,
     email: customer.email,
+    isHost: false,
   });
 });
 
@@ -85,6 +86,7 @@ router.post("/customer/login", async (req, res) => {
     firstName: customer.firstName,
     lastName: customer.lastName,
     email: customer.email,
+    isHost: customer.adminRole !== null && customer.adminRole !== undefined,
   });
 });
 
@@ -110,17 +112,12 @@ router.get("/customer/me", async (req, res) => {
     return;
   }
 
-  const [linkedAdmin] = await db
-    .select({ id: adminUsersTable.id })
-    .from(adminUsersTable)
-    .where(eq(adminUsersTable.linkedCustomerId, customer.id));
-
   res.json({
     id: customer.id,
     firstName: customer.firstName,
     lastName: customer.lastName,
     email: customer.email,
-    isHost: !!linkedAdmin,
+    isHost: customer.adminRole !== null && customer.adminRole !== undefined,
   });
 });
 

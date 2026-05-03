@@ -14,8 +14,6 @@ import {
   Mail,
   Phone,
   Home,
-  LinkIcon,
-  Unlink,
 } from "lucide-react";
 import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
@@ -91,7 +89,6 @@ interface AdminUser {
   username: string;
   role: AdminRole;
   displayName: string | null;
-  linkedCustomerId: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -102,6 +99,7 @@ interface Customer {
   firstName: string;
   lastName: string;
   phone: string | null;
+  adminRole: AdminRole | null;
   createdAt: string;
 }
 
@@ -113,6 +111,10 @@ interface PropertyAssignment {
 }
 
 interface AdminUserDetail extends AdminUser {
+  assignments: PropertyAssignment[];
+}
+
+interface CustomerDetail extends Customer {
   assignments: PropertyAssignment[];
 }
 
@@ -160,14 +162,19 @@ export default function Users() {
   const { isSuperAdmin } = useAuth();
   const queryClient = useQueryClient();
 
+  // Admin users state
   const [createOpen, setCreateOpen] = useState(false);
   const [editUser, setEditUser] = useState<AdminUser | null>(null);
   const [deleteUser, setDeleteUser] = useState<AdminUser | null>(null);
   const [assignUser, setAssignUser] = useState<AdminUserDetail | null>(null);
   const [assignLoading, setAssignLoading] = useState(false);
+
+  // Customer state
   const [makeHostCustomer, setMakeHostCustomer] = useState<Customer | null>(null);
-  const [unlinkAdmin, setUnlinkAdmin] = useState<AdminUser | null>(null);
-  const [unlinkLoading, setUnlinkLoading] = useState(false);
+  const [revokeHostCustomer, setRevokeHostCustomer] = useState<Customer | null>(null);
+  const [revokeLoading, setRevokeLoading] = useState(false);
+  const [assignCustomer, setAssignCustomer] = useState<CustomerDetail | null>(null);
+  const [assignCustomerLoading, setAssignCustomerLoading] = useState(false);
 
   const { data: users = [], isLoading: isLoadingUsers } = useQuery<AdminUser[]>({
     queryKey: ["admin", "users"],
@@ -193,36 +200,11 @@ export default function Users() {
   };
   const invalidateUsers = invalidateAll;
 
-  // Map: customerId → admin user linked to it
-  const linkedAdminByCustomerId = new Map<number, AdminUser>(
-    users
-      .filter((u) => u.linkedCustomerId !== null)
-      .map((u) => [u.linkedCustomerId as number, u]),
-  );
-
-  async function handleUnlinkCustomer() {
-    if (!unlinkAdmin) return;
-    setUnlinkLoading(true);
-    try {
-      await apiRequest(`/api/admin/users/${unlinkAdmin.id}`, {
-        method: "PUT",
-        body: JSON.stringify({ linkedCustomerId: null }),
-      });
-      toast.success("Account cliente scollegato");
-      invalidateAll();
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setUnlinkLoading(false);
-      setUnlinkAdmin(null);
-    }
-  }
+  // ── Admin user handlers ─────────────────────────────────────────────
 
   async function loadUserDetail(user: AdminUser) {
     try {
-      const detail = await apiRequest<AdminUserDetail>(
-        `/api/admin/users/${user.id}`,
-      );
+      const detail = await apiRequest<AdminUserDetail>(`/api/admin/users/${user.id}`);
       setAssignUser(detail);
     } catch {
       toast.error("Impossibile caricare i dettagli utente");
@@ -232,9 +214,7 @@ export default function Users() {
   async function handleDeleteUser() {
     if (!deleteUser) return;
     try {
-      await apiRequest(`/api/admin/users/${deleteUser.id}`, {
-        method: "DELETE",
-      });
+      await apiRequest(`/api/admin/users/${deleteUser.id}`, { method: "DELETE" });
       toast.success(`Utente "${deleteUser.username}" eliminato`);
       invalidateUsers();
     } catch (e) {
@@ -252,9 +232,7 @@ export default function Users() {
         method: "POST",
         body: JSON.stringify({ adminUserId: assignUser.id, propertyId }),
       });
-      const updated = await apiRequest<AdminUserDetail>(
-        `/api/admin/users/${assignUser.id}`,
-      );
+      const updated = await apiRequest<AdminUserDetail>(`/api/admin/users/${assignUser.id}`);
       setAssignUser(updated);
       invalidateUsers();
       toast.success("Proprietà assegnata");
@@ -269,12 +247,8 @@ export default function Users() {
     if (!assignUser) return;
     setAssignLoading(true);
     try {
-      await apiRequest(`/api/admin/property-assignments/${assignmentId}`, {
-        method: "DELETE",
-      });
-      const updated = await apiRequest<AdminUserDetail>(
-        `/api/admin/users/${assignUser.id}`,
-      );
+      await apiRequest(`/api/admin/property-assignments/${assignmentId}`, { method: "DELETE" });
+      const updated = await apiRequest<AdminUserDetail>(`/api/admin/users/${assignUser.id}`);
       setAssignUser(updated);
       invalidateUsers();
       toast.success("Assegnazione rimossa");
@@ -285,14 +259,76 @@ export default function Users() {
     }
   }
 
+  // ── Customer admin-role handlers ────────────────────────────────────
+
+  async function handleRevokeHost() {
+    if (!revokeHostCustomer) return;
+    setRevokeLoading(true);
+    try {
+      await apiRequest(`/api/admin/customers/${revokeHostCustomer.id}/admin-role`, {
+        method: "PUT",
+        body: JSON.stringify({ role: null }),
+      });
+      toast.success(`Ruolo host rimosso da ${revokeHostCustomer.firstName} ${revokeHostCustomer.lastName}`);
+      invalidateAll();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setRevokeLoading(false);
+      setRevokeHostCustomer(null);
+    }
+  }
+
+  async function loadCustomerDetail(customer: Customer) {
+    try {
+      const detail = await apiRequest<CustomerDetail>(`/api/admin/customers/${customer.id}/assignments`);
+      setAssignCustomer(detail);
+    } catch {
+      toast.error("Impossibile caricare le assegnazioni del cliente");
+    }
+  }
+
+  async function handleAddCustomerAssignment(propertyId: number) {
+    if (!assignCustomer) return;
+    setAssignCustomerLoading(true);
+    try {
+      await apiRequest(`/api/admin/customers/${assignCustomer.id}/assignments`, {
+        method: "POST",
+        body: JSON.stringify({ propertyId }),
+      });
+      const updated = await apiRequest<CustomerDetail>(`/api/admin/customers/${assignCustomer.id}/assignments`);
+      setAssignCustomer(updated);
+      invalidateAll();
+      toast.success("Proprietà assegnata");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setAssignCustomerLoading(false);
+    }
+  }
+
+  async function handleRemoveCustomerAssignment(assignmentId: number) {
+    if (!assignCustomer) return;
+    setAssignCustomerLoading(true);
+    try {
+      await apiRequest(`/api/admin/property-assignments/${assignmentId}`, { method: "DELETE" });
+      const updated = await apiRequest<CustomerDetail>(`/api/admin/customers/${assignCustomer.id}/assignments`);
+      setAssignCustomer(updated);
+      invalidateAll();
+      toast.success("Assegnazione rimossa");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setAssignCustomerLoading(false);
+    }
+  }
+
   if (!isSuperAdmin) {
     return (
       <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Utenti</h1>
-          <p className="text-muted-foreground">
-            Gestione degli utenti della piattaforma.
-          </p>
+          <p className="text-muted-foreground">Gestione degli utenti della piattaforma.</p>
         </div>
         <Card>
           <CardHeader>
@@ -300,9 +336,7 @@ export default function Users() {
               <ShieldCheck className="h-5 w-5" />
               Accesso negato
             </CardTitle>
-            <CardDescription>
-              Solo i Super Admin possono gestire gli utenti.
-            </CardDescription>
+            <CardDescription>Solo i Super Admin possono gestire gli utenti.</CardDescription>
           </CardHeader>
         </Card>
       </div>
@@ -314,9 +348,7 @@ export default function Users() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Utenti</h1>
-          <p className="text-muted-foreground">
-            Tutti gli utenti registrati sulla piattaforma.
-          </p>
+          <p className="text-muted-foreground">Tutti gli utenti registrati sulla piattaforma.</p>
         </div>
         <Button onClick={() => setCreateOpen(true)} className="gap-2">
           <Plus className="h-4 w-4" />
@@ -352,16 +384,12 @@ export default function Users() {
             <CardContent className="p-0">
               {isLoadingUsers ? (
                 <div className="p-6 space-y-3">
-                  {[...Array(3)].map((_, i) => (
-                    <Skeleton key={i} className="h-12 w-full" />
-                  ))}
+                  {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
                 </div>
               ) : users.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 text-center">
                   <UsersIcon className="h-12 w-12 text-muted-foreground/40 mb-4" />
-                  <p className="text-muted-foreground">
-                    Nessun utente trovato. Crea il primo utente.
-                  </p>
+                  <p className="text-muted-foreground">Nessun utente trovato. Crea il primo utente.</p>
                 </div>
               ) : (
                 <Table>
@@ -369,12 +397,8 @@ export default function Users() {
                     <TableRow>
                       <TableHead>Utente</TableHead>
                       <TableHead>Ruolo</TableHead>
-                      <TableHead className="hidden md:table-cell">
-                        Proprietà assegnate
-                      </TableHead>
-                      <TableHead className="hidden md:table-cell">
-                        Registrato
-                      </TableHead>
+                      <TableHead className="hidden md:table-cell">Proprietà assegnate</TableHead>
+                      <TableHead className="hidden md:table-cell">Registrato</TableHead>
                       <TableHead className="w-[60px]" />
                     </TableRow>
                   </TableHeader>
@@ -384,23 +408,15 @@ export default function Users() {
                         <TableCell>
                           <div className="flex items-center gap-3">
                             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary font-semibold text-sm shrink-0">
-                              {(user.displayName ?? user.username)
-                                .charAt(0)
-                                .toUpperCase()}
+                              {(user.displayName ?? user.username).charAt(0).toUpperCase()}
                             </div>
                             <div>
-                              <p className="font-medium leading-none">
-                                {user.displayName ?? user.username}
-                              </p>
-                              <p className="text-xs text-muted-foreground mt-0.5">
-                                @{user.username}
-                              </p>
+                              <p className="font-medium leading-none">{user.displayName ?? user.username}</p>
+                              <p className="text-xs text-muted-foreground mt-0.5">@{user.username}</p>
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell>
-                          <RoleBadge role={user.role} />
-                        </TableCell>
+                        <TableCell><RoleBadge role={user.role} /></TableCell>
                         <TableCell className="hidden md:table-cell">
                           {user.role === "property_manager" ? (
                             <button
@@ -462,16 +478,12 @@ export default function Users() {
             <CardContent className="p-0">
               {isLoadingCustomers ? (
                 <div className="p-6 space-y-3">
-                  {[...Array(4)].map((_, i) => (
-                    <Skeleton key={i} className="h-12 w-full" />
-                  ))}
+                  {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
                 </div>
               ) : customers.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 text-center">
                   <UserCircle2 className="h-12 w-12 text-muted-foreground/40 mb-4" />
-                  <p className="text-muted-foreground">
-                    Nessun cliente registrato ancora.
-                  </p>
+                  <p className="text-muted-foreground">Nessun cliente registrato ancora.</p>
                   <p className="text-sm text-muted-foreground mt-1">
                     I clienti appaiono qui dopo la registrazione sul sito pubblico.
                   </p>
@@ -483,72 +495,74 @@ export default function Users() {
                       <TableHead>Cliente</TableHead>
                       <TableHead className="hidden md:table-cell">Email</TableHead>
                       <TableHead className="hidden lg:table-cell">Telefono</TableHead>
-                      <TableHead>Ruolo / Accesso</TableHead>
+                      <TableHead>Ruolo</TableHead>
                       <TableHead className="hidden md:table-cell">Registrato</TableHead>
-                      <TableHead className="w-[60px]" />
+                      <TableHead className="w-[120px]" />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {customers.map((c) => {
-                      const linkedAdmin = linkedAdminByCustomerId.get(c.id);
-                      return (
-                        <TableRow key={c.id}>
-                          <TableCell>
-                            <div className="flex items-center gap-3">
-                              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-muted-foreground font-semibold text-sm shrink-0">
-                                {c.firstName.charAt(0).toUpperCase()}
-                              </div>
-                              <div>
-                                <p className="font-medium leading-none">
-                                  {c.firstName} {c.lastName}
-                                </p>
-                                <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
-                                  <Mail className="h-3 w-3 shrink-0" />
-                                  {c.email}
-                                </p>
-                              </div>
+                    {customers.map((c) => (
+                      <TableRow key={c.id}>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-muted-foreground font-semibold text-sm shrink-0">
+                              {c.firstName.charAt(0).toUpperCase()}
                             </div>
-                          </TableCell>
-                          <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
-                            {c.email}
-                          </TableCell>
-                          <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
-                            {c.phone ? (
-                              <div className="flex items-center gap-1.5">
-                                <Phone className="h-3.5 w-3.5 shrink-0" />
-                                {c.phone}
-                              </div>
-                            ) : (
-                              <span>—</span>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              <Badge variant="outline" className="gap-1 text-muted-foreground">
-                                <UserCircle2 className="h-3 w-3" />
-                                Cliente
-                              </Badge>
-                              {linkedAdmin ? (
-                                <Badge variant="secondary" className="gap-1">
-                                  <Home className="h-3 w-3" />
-                                  Host: @{linkedAdmin.username}
-                                </Badge>
-                              ) : null}
+                            <div>
+                              <p className="font-medium leading-none">{c.firstName} {c.lastName}</p>
+                              <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                                <Mail className="h-3 w-3 shrink-0" />
+                                {c.email}
+                              </p>
                             </div>
-                          </TableCell>
-                          <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
-                            {format(parseISO(c.createdAt), "dd/MM/yyyy")}
-                          </TableCell>
-                          <TableCell>
-                            {linkedAdmin ? (
+                          </div>
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
+                          {c.email}
+                        </TableCell>
+                        <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
+                          {c.phone ? (
+                            <div className="flex items-center gap-1.5">
+                              <Phone className="h-3.5 w-3.5 shrink-0" />
+                              {c.phone}
+                            </div>
+                          ) : <span>—</span>}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <Badge variant="outline" className="gap-1 text-muted-foreground">
+                              <UserCircle2 className="h-3 w-3" />
+                              Cliente
+                            </Badge>
+                            {c.adminRole && <RoleBadge role={c.adminRole} />}
+                          </div>
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
+                          {format(parseISO(c.createdAt), "dd/MM/yyyy")}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            {c.adminRole === "property_manager" && (
                               <Button
                                 variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                                title="Scollega account host"
-                                onClick={() => setUnlinkAdmin(linkedAdmin)}
+                                size="sm"
+                                className="h-8 gap-1 text-xs"
+                                title="Gestisci proprietà assegnate"
+                                onClick={() => loadCustomerDetail(c)}
                               >
-                                <Unlink className="h-4 w-4" />
+                                <Building className="h-3.5 w-3.5" />
+                                <span className="hidden sm:inline">Proprietà</span>
+                              </Button>
+                            )}
+                            {c.adminRole ? (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 gap-1 text-xs text-destructive hover:text-destructive"
+                                onClick={() => setRevokeHostCustomer(c)}
+                              >
+                                <X className="h-3.5 w-3.5" />
+                                <span className="hidden sm:inline">Revoca</span>
                               </Button>
                             ) : (
                               <Button
@@ -557,14 +571,14 @@ export default function Users() {
                                 className="h-8 gap-1.5 text-xs"
                                 onClick={() => setMakeHostCustomer(c)}
                               >
-                                <LinkIcon className="h-3.5 w-3.5" />
+                                <Home className="h-3.5 w-3.5" />
                                 Rendi Host
                               </Button>
                             )}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
                   </TableBody>
                 </Table>
               )}
@@ -573,20 +587,19 @@ export default function Users() {
         </TabsContent>
       </Tabs>
 
-      {/* Create user dialog */}
+      {/* ── Create admin user dialog ── */}
       <CreateUserDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
         onSuccess={invalidateUsers}
       />
 
-      {/* Make host dialog */}
+      {/* ── Make host dialog (simplified) ── */}
       {makeHostCustomer && (
         <MakeHostDialog
           customer={makeHostCustomer}
           open={!!makeHostCustomer}
           onOpenChange={(o) => !o && setMakeHostCustomer(null)}
-          unlinkedAdmins={users.filter((u) => u.linkedCustomerId === null)}
           onSuccess={() => {
             invalidateAll();
             setMakeHostCustomer(null);
@@ -594,34 +607,34 @@ export default function Users() {
         />
       )}
 
-      {/* Unlink host confirmation */}
+      {/* ── Revoke host confirmation ── */}
       <AlertDialog
-        open={!!unlinkAdmin}
-        onOpenChange={(o) => !o && setUnlinkAdmin(null)}
+        open={!!revokeHostCustomer}
+        onOpenChange={(o) => !o && setRevokeHostCustomer(null)}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Scollega account host</AlertDialogTitle>
+            <AlertDialogTitle>Revoca ruolo host</AlertDialogTitle>
             <AlertDialogDescription>
-              Sei sicuro di voler rimuovere il collegamento tra questo cliente e
-              l'account host <strong>@{unlinkAdmin?.username}</strong>? L'account
-              amministratore rimarrà attivo ma separato.
+              Sei sicuro di voler rimuovere il ruolo host da{" "}
+              <strong>{revokeHostCustomer?.firstName} {revokeHostCustomer?.lastName}</strong>?{" "}
+              Il cliente non potrà più accedere al pannello di gestione e perderà le assegnazioni di proprietà.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={unlinkLoading}>Annulla</AlertDialogCancel>
+            <AlertDialogCancel disabled={revokeLoading}>Annulla</AlertDialogCancel>
             <AlertDialogAction
-              onClick={handleUnlinkCustomer}
-              disabled={unlinkLoading}
+              onClick={handleRevokeHost}
+              disabled={revokeLoading}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {unlinkLoading ? "Rimozione..." : "Scollega"}
+              {revokeLoading ? "Rimozione..." : "Revoca host"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Edit user dialog */}
+      {/* ── Edit admin user dialog ── */}
       {editUser && (
         <EditUserDialog
           user={editUser}
@@ -634,7 +647,7 @@ export default function Users() {
         />
       )}
 
-      {/* Delete confirmation */}
+      {/* ── Delete admin user confirmation ── */}
       <AlertDialog
         open={!!deleteUser}
         onOpenChange={(o) => !o && setDeleteUser(null)}
@@ -660,96 +673,48 @@ export default function Users() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Property assignments sheet */}
+      {/* ── Admin user property assignments sheet ── */}
       <Sheet open={!!assignUser} onOpenChange={(o) => !o && setAssignUser(null)}>
         <SheetContent className="sm:max-w-md">
           <SheetHeader>
             <SheetTitle>Proprietà assegnate</SheetTitle>
             <SheetDescription>
               {assignUser && (
-                <>
-                  Gestisci le proprietà visibili a{" "}
-                  <strong>{assignUser.displayName ?? assignUser.username}</strong>.
-                </>
+                <>Gestisci le proprietà visibili a <strong>{assignUser.displayName ?? assignUser.username}</strong>.</>
               )}
             </SheetDescription>
           </SheetHeader>
-
           {assignUser && (
-            <div className="mt-6 space-y-6">
-              <div className="space-y-2">
-                <h4 className="text-sm font-medium">Assegnate</h4>
-                {assignUser.assignments.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    Nessuna proprietà assegnata.
-                  </p>
-                ) : (
-                  <div className="space-y-2">
-                    {assignUser.assignments.map((a) => (
-                      <div
-                        key={a.id}
-                        className="flex items-center justify-between rounded-md border p-3"
-                      >
-                        <div>
-                          <p className="text-sm font-medium">{a.propertyName}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {a.propertyLocation}
-                          </p>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                          disabled={assignLoading}
-                          onClick={() => handleRemoveAssignment(a.id)}
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+            <AssignmentList
+              assignments={assignUser.assignments}
+              properties={properties}
+              loading={assignLoading}
+              onAdd={handleAddAssignment}
+              onRemove={handleRemoveAssignment}
+            />
+          )}
+        </SheetContent>
+      </Sheet>
 
-              {(() => {
-                const assignedIds = new Set(
-                  assignUser.assignments.map((a) => a.propertyId),
-                );
-                const unassigned = properties.filter(
-                  (p) => !assignedIds.has(p.id),
-                );
-                if (unassigned.length === 0) return null;
-                return (
-                  <div className="space-y-2">
-                    <h4 className="text-sm font-medium">Aggiungi proprietà</h4>
-                    <div className="space-y-2">
-                      {unassigned.map((p) => (
-                        <div
-                          key={p.id}
-                          className="flex items-center justify-between rounded-md border border-dashed p-3"
-                        >
-                          <div>
-                            <p className="text-sm font-medium">{p.name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {p.location}
-                            </p>
-                          </div>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={assignLoading}
-                            onClick={() => handleAddAssignment(p.id)}
-                          >
-                            <Plus className="h-3 w-3 mr-1" />
-                            Assegna
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
+      {/* ── Customer property assignments sheet ── */}
+      <Sheet open={!!assignCustomer} onOpenChange={(o) => !o && setAssignCustomer(null)}>
+        <SheetContent className="sm:max-w-md">
+          <SheetHeader>
+            <SheetTitle>Proprietà assegnate</SheetTitle>
+            <SheetDescription>
+              {assignCustomer && (
+                <>Gestisci le proprietà visibili a <strong>{assignCustomer.firstName} {assignCustomer.lastName}</strong>.</>
+              )}
+            </SheetDescription>
+          </SheetHeader>
+          {assignCustomer && (
+            <AssignmentList
+              assignments={assignCustomer.assignments}
+              properties={properties}
+              loading={assignCustomerLoading}
+              onAdd={handleAddCustomerAssignment}
+              onRemove={handleRemoveCustomerAssignment}
+            />
           )}
         </SheetContent>
       </Sheet>
@@ -758,7 +723,84 @@ export default function Users() {
 }
 
 /* ------------------------------------------------------------------ */
-/* Create User Dialog                                                    */
+/* Shared: Assignment List                                               */
+/* ------------------------------------------------------------------ */
+
+function AssignmentList({
+  assignments,
+  properties,
+  loading,
+  onAdd,
+  onRemove,
+}: {
+  assignments: PropertyAssignment[];
+  properties: Property[];
+  loading: boolean;
+  onAdd: (propertyId: number) => void;
+  onRemove: (assignmentId: number) => void;
+}) {
+  const assignedIds = new Set(assignments.map((a) => a.propertyId));
+  const unassigned = properties.filter((p) => !assignedIds.has(p.id));
+
+  return (
+    <div className="mt-6 space-y-6">
+      <div className="space-y-2">
+        <h4 className="text-sm font-medium">Assegnate</h4>
+        {assignments.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Nessuna proprietà assegnata.</p>
+        ) : (
+          <div className="space-y-2">
+            {assignments.map((a) => (
+              <div key={a.id} className="flex items-center justify-between rounded-md border p-3">
+                <div>
+                  <p className="text-sm font-medium">{a.propertyName}</p>
+                  <p className="text-xs text-muted-foreground">{a.propertyLocation}</p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                  disabled={loading}
+                  onClick={() => onRemove(a.id)}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {unassigned.length > 0 && (
+        <div className="space-y-2">
+          <h4 className="text-sm font-medium">Aggiungi proprietà</h4>
+          <div className="space-y-2">
+            {unassigned.map((p) => (
+              <div key={p.id} className="flex items-center justify-between rounded-md border border-dashed p-3">
+                <div>
+                  <p className="text-sm font-medium">{p.name}</p>
+                  <p className="text-xs text-muted-foreground">{p.location}</p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={loading}
+                  onClick={() => onAdd(p.id)}
+                >
+                  <Plus className="h-3 w-3 mr-1" />
+                  Assegna
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Create Admin User Dialog                                              */
 /* ------------------------------------------------------------------ */
 
 function CreateUserDialog({
@@ -814,9 +856,7 @@ function CreateUserDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Nuovo utente</DialogTitle>
-          <DialogDescription>
-            Crea un nuovo account amministratore.
-          </DialogDescription>
+          <DialogDescription>Crea un nuovo account amministratore di sistema.</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
@@ -868,11 +908,7 @@ function CreateUserDialog({
           </div>
           {error && <p className="text-sm text-destructive font-medium">{error}</p>}
           <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => { onOpenChange(false); reset(); }}
-            >
+            <Button type="button" variant="outline" onClick={() => { onOpenChange(false); reset(); }}>
               Annulla
             </Button>
             <Button type="submit" disabled={loading}>
@@ -886,90 +922,34 @@ function CreateUserDialog({
 }
 
 /* ------------------------------------------------------------------ */
-/* Make Host Dialog                                                      */
+/* Make Host Dialog (simplified: just set adminRole on customer)         */
 /* ------------------------------------------------------------------ */
 
 function MakeHostDialog({
   customer,
   open,
   onOpenChange,
-  unlinkedAdmins,
   onSuccess,
 }: {
   customer: Customer;
   open: boolean;
   onOpenChange: (o: boolean) => void;
-  unlinkedAdmins: AdminUser[];
   onSuccess: () => void;
 }) {
-  const defaultUsername = `${customer.firstName.toLowerCase()}.${customer.lastName.toLowerCase()}`.replace(/\s+/g, "");
-  const defaultDisplay = `${customer.firstName} ${customer.lastName}`.trim();
-
-  const [tab, setTab] = useState<"new" | "existing">("existing");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // "Nuovo account" form
-  const [form, setForm] = useState({ username: defaultUsername, displayName: defaultDisplay, password: "" });
-
-  // "Collega esistente" form
-  const [selectedAdminId, setSelectedAdminId] = useState<string>("");
-
-  const reset = () => {
-    setTab("existing");
-    setForm({ username: defaultUsername, displayName: defaultDisplay, password: "" });
-    setSelectedAdminId("");
-    setError("");
-  };
-
-  const handleLinkExisting = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedAdminId) return;
+  const handleConfirm = async () => {
     setError("");
     setLoading(true);
     try {
-      await apiRequest(`/api/admin/users/${selectedAdminId}`, {
+      await apiRequest(`/api/admin/customers/${customer.id}/admin-role`, {
         method: "PUT",
-        body: JSON.stringify({ linkedCustomerId: customer.id }),
+        body: JSON.stringify({ role: "property_manager" }),
       });
-      const admin = unlinkedAdmins.find((u) => String(u.id) === selectedAdminId);
-      toast.success(
-        `Account "@${admin?.username}" collegato a ${customer.firstName} ${customer.lastName}`,
-      );
+      toast.success(`${customer.firstName} ${customer.lastName} è ora un Property Manager`);
       onSuccess();
       onOpenChange(false);
-      reset();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleCreateNew = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
-    setLoading(true);
-    try {
-      const newUser = await apiRequest<AdminUser>("/api/admin/users", {
-        method: "POST",
-        body: JSON.stringify({
-          username: form.username,
-          password: form.password,
-          role: "property_manager",
-          displayName: form.displayName || undefined,
-        }),
-      });
-      await apiRequest(`/api/admin/users/${newUser.id}`, {
-        method: "PUT",
-        body: JSON.stringify({ linkedCustomerId: customer.id }),
-      });
-      toast.success(
-        `Account host "@${form.username}" creato e collegato a ${customer.firstName} ${customer.lastName}`,
-      );
-      onSuccess();
-      onOpenChange(false);
-      reset();
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -978,141 +958,53 @@ function MakeHostDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) reset(); }}>
+    <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) setError(""); }}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Home className="h-5 w-5" />
-            Aggiungi come Host
+            Abilita come Host
           </DialogTitle>
           <DialogDescription>
-            Abilita <strong>{customer.firstName} {customer.lastName}</strong> a
-            gestire proprietà come host. L'account cliente rimane invariato.
+            Assegna il ruolo di <strong>Property Manager</strong> a{" "}
+            <strong>{customer.firstName} {customer.lastName}</strong>.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="rounded-md bg-muted/50 border px-3 py-2 text-sm text-muted-foreground flex items-center gap-2">
-          <UserCircle2 className="h-4 w-4 shrink-0" />
-          {customer.email}
+        <div className="space-y-3 py-2">
+          <div className="rounded-md bg-muted/50 border px-3 py-2 text-sm text-muted-foreground flex items-center gap-2">
+            <UserCircle2 className="h-4 w-4 shrink-0" />
+            {customer.email}
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Il cliente potrà accedere al pannello amministrativo usando la
+            sua email e la sua password esistente. Non sarà necessario creare
+            un nuovo account separato.
+          </p>
         </div>
 
-        <Tabs value={tab} onValueChange={(v) => { setTab(v as "new" | "existing"); setError(""); }}>
-          <TabsList className="w-full">
-            <TabsTrigger value="existing" className="flex-1 gap-1.5">
-              <LinkIcon className="h-3.5 w-3.5" />
-              Collega account esistente
-            </TabsTrigger>
-            <TabsTrigger value="new" className="flex-1 gap-1.5">
-              <Plus className="h-3.5 w-3.5" />
-              Crea nuovo account
-            </TabsTrigger>
-          </TabsList>
+        {error && <p className="text-sm text-destructive font-medium">{error}</p>}
 
-          {/* ── Tab: collega account esistente ── */}
-          <TabsContent value="existing">
-            <form onSubmit={handleLinkExisting} className="space-y-4 pt-1">
-              <p className="text-sm text-muted-foreground">
-                Seleziona un account amministratore già esistente da collegare a questo cliente.
-              </p>
-              {unlinkedAdmins.length === 0 ? (
-                <div className="rounded-md border border-dashed p-4 text-center text-sm text-muted-foreground">
-                  Nessun account amministratore disponibile senza collegamento.<br />
-                  Usa "Crea nuovo account" per creare un account host da zero.
-                </div>
-              ) : (
-                <div className="space-y-1.5">
-                  <Label htmlFor="mh-existing">Account amministratore</Label>
-                  <Select value={selectedAdminId} onValueChange={setSelectedAdminId}>
-                    <SelectTrigger id="mh-existing">
-                      <SelectValue placeholder="Seleziona un account..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {unlinkedAdmins.map((u) => (
-                        <SelectItem key={u.id} value={String(u.id)}>
-                          <span className="font-medium">@{u.username}</span>
-                          {u.displayName && (
-                            <span className="text-muted-foreground ml-1.5">— {u.displayName}</span>
-                          )}
-                          <span className="ml-1.5 text-xs text-muted-foreground">
-                            ({u.role === "super_admin" ? "Super Admin" : "Property Manager"})
-                          </span>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-              {error && <p className="text-sm text-destructive font-medium">{error}</p>}
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => { onOpenChange(false); reset(); }}>
-                  Annulla
-                </Button>
-                <Button type="submit" disabled={loading || !selectedAdminId || unlinkedAdmins.length === 0} className="gap-2">
-                  <LinkIcon className="h-4 w-4" />
-                  {loading ? "Collegamento..." : "Collega"}
-                </Button>
-              </DialogFooter>
-            </form>
-          </TabsContent>
-
-          {/* ── Tab: crea nuovo account ── */}
-          <TabsContent value="new">
-            <form onSubmit={handleCreateNew} className="space-y-4 pt-1">
-              <p className="text-sm text-muted-foreground">
-                Crea un nuovo account Property Manager per questo cliente.
-              </p>
-              <div className="space-y-1.5">
-                <Label htmlFor="mh-username">Username (per il login admin)</Label>
-                <Input
-                  id="mh-username"
-                  value={form.username}
-                  onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
-                  placeholder="mario.rossi"
-                  required
-                  minLength={3}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="mh-displayName">Nome visualizzato</Label>
-                <Input
-                  id="mh-displayName"
-                  value={form.displayName}
-                  onChange={(e) => setForm((f) => ({ ...f, displayName: e.target.value }))}
-                  placeholder="Mario Rossi"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="mh-password">Password admin</Label>
-                <Input
-                  id="mh-password"
-                  type="password"
-                  value={form.password}
-                  onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-                  placeholder="Minimo 8 caratteri"
-                  required
-                  minLength={8}
-                />
-              </div>
-              {error && <p className="text-sm text-destructive font-medium">{error}</p>}
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => { onOpenChange(false); reset(); }}>
-                  Annulla
-                </Button>
-                <Button type="submit" disabled={loading} className="gap-2">
-                  <Home className="h-4 w-4" />
-                  {loading ? "Creazione..." : "Crea account host"}
-                </Button>
-              </DialogFooter>
-            </form>
-          </TabsContent>
-        </Tabs>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => { onOpenChange(false); setError(""); }}
+          >
+            Annulla
+          </Button>
+          <Button onClick={handleConfirm} disabled={loading} className="gap-2">
+            <Home className="h-4 w-4" />
+            {loading ? "Abilitazione..." : "Abilita come Host"}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
 
 /* ------------------------------------------------------------------ */
-/* Edit User Dialog                                                       */
+/* Edit Admin User Dialog                                                */
 /* ------------------------------------------------------------------ */
 
 function EditUserDialog({
@@ -1170,9 +1062,7 @@ function EditUserDialog({
             <Input
               id="e-displayName"
               value={form.displayName}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, displayName: e.target.value }))
-              }
+              onChange={(e) => setForm((f) => ({ ...f, displayName: e.target.value }))}
               placeholder="Nome Cognome"
             />
           </div>
@@ -1180,9 +1070,7 @@ function EditUserDialog({
             <Label htmlFor="e-role">Ruolo</Label>
             <Select
               value={form.role}
-              onValueChange={(v) =>
-                setForm((f) => ({ ...f, role: v as AdminRole }))
-              }
+              onValueChange={(v) => setForm((f) => ({ ...f, role: v as AdminRole }))}
             >
               <SelectTrigger id="e-role">
                 <SelectValue />
@@ -1197,30 +1085,20 @@ function EditUserDialog({
             <Label htmlFor="e-password" className="flex items-center gap-1.5">
               <KeyRound className="h-3.5 w-3.5" />
               Nuova password{" "}
-              <span className="text-muted-foreground font-normal">
-                (lascia vuoto per non cambiare)
-              </span>
+              <span className="text-muted-foreground font-normal">(lascia vuoto per non cambiare)</span>
             </Label>
             <Input
               id="e-password"
               type="password"
               value={form.password}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, password: e.target.value }))
-              }
+              onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
               placeholder="••••••••"
               minLength={8}
             />
           </div>
-          {error && (
-            <p className="text-sm text-destructive font-medium">{error}</p>
-          )}
+          {error && <p className="text-sm text-destructive font-medium">{error}</p>}
           <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Annulla
             </Button>
             <Button type="submit" disabled={loading}>
