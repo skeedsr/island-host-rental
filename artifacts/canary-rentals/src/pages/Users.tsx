@@ -586,6 +586,7 @@ export default function Users() {
           customer={makeHostCustomer}
           open={!!makeHostCustomer}
           onOpenChange={(o) => !o && setMakeHostCustomer(null)}
+          unlinkedAdmins={users.filter((u) => u.linkedCustomerId === null)}
           onSuccess={() => {
             invalidateAll();
             setMakeHostCustomer(null);
@@ -892,35 +893,64 @@ function MakeHostDialog({
   customer,
   open,
   onOpenChange,
+  unlinkedAdmins,
   onSuccess,
 }: {
   customer: Customer;
   open: boolean;
   onOpenChange: (o: boolean) => void;
+  unlinkedAdmins: AdminUser[];
   onSuccess: () => void;
 }) {
   const defaultUsername = `${customer.firstName.toLowerCase()}.${customer.lastName.toLowerCase()}`.replace(/\s+/g, "");
   const defaultDisplay = `${customer.firstName} ${customer.lastName}`.trim();
 
+  const [tab, setTab] = useState<"new" | "existing">("existing");
   const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState({
-    username: defaultUsername,
-    displayName: defaultDisplay,
-    password: "",
-  });
   const [error, setError] = useState("");
 
+  // "Nuovo account" form
+  const [form, setForm] = useState({ username: defaultUsername, displayName: defaultDisplay, password: "" });
+
+  // "Collega esistente" form
+  const [selectedAdminId, setSelectedAdminId] = useState<string>("");
+
   const reset = () => {
+    setTab("existing");
     setForm({ username: defaultUsername, displayName: defaultDisplay, password: "" });
+    setSelectedAdminId("");
     setError("");
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleLinkExisting = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedAdminId) return;
+    setError("");
+    setLoading(true);
+    try {
+      await apiRequest(`/api/admin/users/${selectedAdminId}`, {
+        method: "PUT",
+        body: JSON.stringify({ linkedCustomerId: customer.id }),
+      });
+      const admin = unlinkedAdmins.find((u) => String(u.id) === selectedAdminId);
+      toast.success(
+        `Account "@${admin?.username}" collegato a ${customer.firstName} ${customer.lastName}`,
+      );
+      onSuccess();
+      onOpenChange(false);
+      reset();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreateNew = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
     try {
-      // 1. Create the property_manager admin account
       const newUser = await apiRequest<AdminUser>("/api/admin/users", {
         method: "POST",
         body: JSON.stringify({
@@ -930,7 +960,6 @@ function MakeHostDialog({
           displayName: form.displayName || undefined,
         }),
       });
-      // 2. Link the customer account to it
       await apiRequest(`/api/admin/users/${newUser.id}`, {
         method: "PUT",
         body: JSON.stringify({ linkedCustomerId: customer.id }),
@@ -957,63 +986,126 @@ function MakeHostDialog({
             Aggiungi come Host
           </DialogTitle>
           <DialogDescription>
-            Crea un account amministratore per{" "}
-            <strong>{customer.firstName} {customer.lastName}</strong> così potrà
-            gestire proprietà. Il loro account cliente rimane invariato.
+            Abilita <strong>{customer.firstName} {customer.lastName}</strong> a
+            gestire proprietà come host. L'account cliente rimane invariato.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="rounded-md bg-muted/50 border px-3 py-2 text-sm text-muted-foreground flex items-center gap-2">
-            <UserCircle2 className="h-4 w-4 shrink-0" />
-            Cliente: {customer.email}
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="mh-username">Username (per il login admin)</Label>
-            <Input
-              id="mh-username"
-              value={form.username}
-              onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
-              placeholder="mario.rossi"
-              required
-              minLength={3}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="mh-displayName">Nome visualizzato</Label>
-            <Input
-              id="mh-displayName"
-              value={form.displayName}
-              onChange={(e) => setForm((f) => ({ ...f, displayName: e.target.value }))}
-              placeholder="Mario Rossi"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="mh-password">Password admin</Label>
-            <Input
-              id="mh-password"
-              type="password"
-              value={form.password}
-              onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-              placeholder="Minimo 8 caratteri"
-              required
-              minLength={8}
-            />
-          </div>
-          {error && <p className="text-sm text-destructive font-medium">{error}</p>}
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => { onOpenChange(false); reset(); }}
-            >
-              Annulla
-            </Button>
-            <Button type="submit" disabled={loading} className="gap-2">
-              <Home className="h-4 w-4" />
-              {loading ? "Creazione..." : "Crea account host"}
-            </Button>
-          </DialogFooter>
-        </form>
+
+        <div className="rounded-md bg-muted/50 border px-3 py-2 text-sm text-muted-foreground flex items-center gap-2">
+          <UserCircle2 className="h-4 w-4 shrink-0" />
+          {customer.email}
+        </div>
+
+        <Tabs value={tab} onValueChange={(v) => { setTab(v as "new" | "existing"); setError(""); }}>
+          <TabsList className="w-full">
+            <TabsTrigger value="existing" className="flex-1 gap-1.5">
+              <LinkIcon className="h-3.5 w-3.5" />
+              Collega account esistente
+            </TabsTrigger>
+            <TabsTrigger value="new" className="flex-1 gap-1.5">
+              <Plus className="h-3.5 w-3.5" />
+              Crea nuovo account
+            </TabsTrigger>
+          </TabsList>
+
+          {/* ── Tab: collega account esistente ── */}
+          <TabsContent value="existing">
+            <form onSubmit={handleLinkExisting} className="space-y-4 pt-1">
+              <p className="text-sm text-muted-foreground">
+                Seleziona un account amministratore già esistente da collegare a questo cliente.
+              </p>
+              {unlinkedAdmins.length === 0 ? (
+                <div className="rounded-md border border-dashed p-4 text-center text-sm text-muted-foreground">
+                  Nessun account amministratore disponibile senza collegamento.<br />
+                  Usa "Crea nuovo account" per creare un account host da zero.
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <Label htmlFor="mh-existing">Account amministratore</Label>
+                  <Select value={selectedAdminId} onValueChange={setSelectedAdminId}>
+                    <SelectTrigger id="mh-existing">
+                      <SelectValue placeholder="Seleziona un account..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {unlinkedAdmins.map((u) => (
+                        <SelectItem key={u.id} value={String(u.id)}>
+                          <span className="font-medium">@{u.username}</span>
+                          {u.displayName && (
+                            <span className="text-muted-foreground ml-1.5">— {u.displayName}</span>
+                          )}
+                          <span className="ml-1.5 text-xs text-muted-foreground">
+                            ({u.role === "super_admin" ? "Super Admin" : "Property Manager"})
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              {error && <p className="text-sm text-destructive font-medium">{error}</p>}
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => { onOpenChange(false); reset(); }}>
+                  Annulla
+                </Button>
+                <Button type="submit" disabled={loading || !selectedAdminId || unlinkedAdmins.length === 0} className="gap-2">
+                  <LinkIcon className="h-4 w-4" />
+                  {loading ? "Collegamento..." : "Collega"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </TabsContent>
+
+          {/* ── Tab: crea nuovo account ── */}
+          <TabsContent value="new">
+            <form onSubmit={handleCreateNew} className="space-y-4 pt-1">
+              <p className="text-sm text-muted-foreground">
+                Crea un nuovo account Property Manager per questo cliente.
+              </p>
+              <div className="space-y-1.5">
+                <Label htmlFor="mh-username">Username (per il login admin)</Label>
+                <Input
+                  id="mh-username"
+                  value={form.username}
+                  onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
+                  placeholder="mario.rossi"
+                  required
+                  minLength={3}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="mh-displayName">Nome visualizzato</Label>
+                <Input
+                  id="mh-displayName"
+                  value={form.displayName}
+                  onChange={(e) => setForm((f) => ({ ...f, displayName: e.target.value }))}
+                  placeholder="Mario Rossi"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="mh-password">Password admin</Label>
+                <Input
+                  id="mh-password"
+                  type="password"
+                  value={form.password}
+                  onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                  placeholder="Minimo 8 caratteri"
+                  required
+                  minLength={8}
+                />
+              </div>
+              {error && <p className="text-sm text-destructive font-medium">{error}</p>}
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => { onOpenChange(false); reset(); }}>
+                  Annulla
+                </Button>
+                <Button type="submit" disabled={loading} className="gap-2">
+                  <Home className="h-4 w-4" />
+                  {loading ? "Creazione..." : "Crea account host"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </TabsContent>
+        </Tabs>
       </DialogContent>
     </Dialog>
   );
