@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useForm } from "react-hook-form";
@@ -40,6 +41,12 @@ import {
   ChevronRight,
   X,
   Expand,
+  Zap,
+  Droplets,
+  Building2,
+  Clock,
+  MessageSquare,
+  Phone,
 } from "lucide-react";
 import {
   format,
@@ -58,6 +65,14 @@ import {
   subMonths,
 } from "date-fns";
 import { toast } from "sonner";
+import {
+  parseRentalTypeFromSearch,
+  isTemporada,
+  getRentalTypePrice,
+  getTemporadaConfig,
+  RENTAL_TYPE_LABELS,
+  RENTAL_TYPE_PRICE_UNIT,
+} from "@/lib/rental-types";
 
 const ISLAND_IMAGES: Record<string, string> = {
   Lanzarote: "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=1200&q=85",
@@ -98,7 +113,15 @@ const bookingSchema = z.object({
   { message: "Check-out must be after check-in", path: ["endDate"] }
 );
 
+const inquirySchema = z.object({
+  name: z.string().min(2, "Il nome è obbligatorio"),
+  email: z.string().email("Inserisci un'email valida"),
+  phone: z.string().min(6, "Il telefono è obbligatorio"),
+  message: z.string().optional(),
+});
+
 type BookingFormValues = z.infer<typeof bookingSchema>;
+type InquiryFormValues = z.infer<typeof inquirySchema>;
 
 function MiniCalendar({
   bookedRanges,
@@ -127,23 +150,17 @@ function MiniCalendar({
             onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
             className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
             aria-label="Previous month"
-          >
-            ‹
-          </button>
+          >‹</button>
           <button
             onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
             className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
             aria-label="Next month"
-          >
-            ›
-          </button>
+          >›</button>
         </div>
       </div>
       <div className="grid grid-cols-7 mb-1">
         {["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].map((d) => (
-          <div key={d} className="text-center text-[10px] font-semibold text-muted-foreground py-1">
-            {d}
-          </div>
+          <div key={d} className="text-center text-[10px] font-semibold text-muted-foreground py-1">{d}</div>
         ))}
       </div>
       <div className="grid grid-cols-7 gap-0.5">
@@ -155,13 +172,11 @@ function MiniCalendar({
           return (
             <div
               key={day.toISOString()}
-              className={`
-                h-7 flex items-center justify-center rounded text-xs
+              className={`h-7 flex items-center justify-center rounded text-xs
                 ${!inMonth ? "opacity-30" : ""}
                 ${booked ? "bg-red-100 text-red-700 font-medium" : ""}
                 ${isPast && !booked ? "text-muted-foreground opacity-50" : ""}
-                ${isToday ? "ring-2 ring-primary font-bold" : ""}
-              `}
+                ${isToday ? "ring-2 ring-primary font-bold" : ""}`}
               title={booked ? "Booked" : undefined}
             >
               {format(day, "d")}
@@ -196,6 +211,13 @@ export default function PublicProperty() {
   const [bookingError, setBookingError] = useState<string | null>(null);
   const [heroIdx, setHeroIdx] = useState(0);
   const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
+  const [showInquiryForm, setShowInquiryForm] = useState(false);
+  const [inquirySent, setInquirySent] = useState(false);
+
+  const rentalType = parseRentalTypeFromSearch(window.location.search);
+  const isTemporadaType = isTemporada(rentalType);
+  const backHref = isTemporadaType ? `/stay/${rentalType}` : "/stay/vacacional";
+  const typeLabel = RENTAL_TYPE_LABELS[rentalType];
 
   const openLightbox = useCallback((idx: number) => {
     setLightboxIdx(idx);
@@ -231,7 +253,6 @@ export default function PublicProperty() {
   );
   const createBooking = useCreateBooking();
 
-  // Keyboard navigation for lightbox
   useEffect(() => {
     if (lightboxIdx === null) return;
     const photos = property?.photos?.length ? property.photos : null;
@@ -250,15 +271,12 @@ export default function PublicProperty() {
 
   const form = useForm<BookingFormValues>({
     resolver: zodResolver(bookingSchema),
-    defaultValues: {
-      firstName: "",
-      lastName: "",
-      email: "",
-      phone: "",
-      startDate: "",
-      endDate: "",
-      notes: "",
-    },
+    defaultValues: { firstName: "", lastName: "", email: "", phone: "", startDate: "", endDate: "", notes: "" },
+  });
+
+  const inquiryForm = useForm<InquiryFormValues>({
+    resolver: zodResolver(inquirySchema),
+    defaultValues: { name: "", email: "", phone: "", message: "" },
   });
 
   const watchStart = form.watch("startDate");
@@ -310,6 +328,12 @@ export default function PublicProperty() {
     }
   };
 
+  const onInquirySubmit = (values: InquiryFormValues) => {
+    setShowInquiryForm(false);
+    setInquirySent(true);
+    inquiryForm.reset();
+  };
+
   const today = format(new Date(), "yyyy-MM-dd");
 
   if (loadingProp) {
@@ -343,13 +367,28 @@ export default function PublicProperty() {
     );
   }
 
+  const displayPrice = getRentalTypePrice(property.rentalTypes, rentalType, property.nightly_rate);
+  const priceUnit = RENTAL_TYPE_PRICE_UNIT[rentalType];
+  const temporadaConfig = isTemporadaType ? getTemporadaConfig(property.rentalTypes, rentalType) : null;
+
+  const TEMPORADA_COLORS: Record<string, string> = {
+    "media-temporada": "bg-emerald-100 text-emerald-800",
+    "larga-temporada": "bg-amber-100 text-amber-800",
+  };
+  const badgeColor = TEMPORADA_COLORS[rentalType] ?? "bg-blue-100 text-blue-800";
+
   return (
     <PublicLayout>
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
-        <Link href="/stay" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6 no-underline transition-colors">
-          <ArrowLeft className="h-4 w-4" />
-          Back to properties
-        </Link>
+        <div className="flex items-center gap-3 mb-6">
+          <Link href={backHref} className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground no-underline transition-colors">
+            <ArrowLeft className="h-4 w-4" />
+            Torna a {typeLabel}
+          </Link>
+          <Badge className={`text-xs ${badgeColor}`}>
+            {typeLabel}
+          </Badge>
+        </div>
 
         {/* Hero photo gallery */}
         {(() => {
@@ -368,7 +407,6 @@ export default function PublicProperty() {
                   onClick={() => openLightbox(idx)}
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent pointer-events-none" />
-                {/* Expand hint */}
                 <button
                   onClick={() => openLightbox(idx)}
                   className="absolute top-3 right-3 p-2 rounded-full bg-black/40 hover:bg-black/60 text-white opacity-0 group-hover/hero:opacity-100 transition-all"
@@ -413,7 +451,6 @@ export default function PublicProperty() {
                   </>
                 )}
               </div>
-              {/* Thumbnail strip */}
               {photos.length > 1 && (
                 <div className="flex gap-2 mt-2 overflow-x-auto pb-1">
                   {photos.map((url, i) => (
@@ -432,6 +469,7 @@ export default function PublicProperty() {
         })()}
 
         <div className="grid md:grid-cols-3 gap-8">
+          {/* Left column */}
           <div className="md:col-span-2 space-y-7">
             <div>
               <div className="flex items-start justify-between gap-4 mb-2">
@@ -451,13 +489,13 @@ export default function PublicProperty() {
                 {property.max_guests && (
                   <span className="flex items-center gap-1.5">
                     <Users className="h-4 w-4" />
-                    Up to {property.max_guests} guests
+                    Fino a {property.max_guests} ospiti
                   </span>
                 )}
-                {property.nightly_rate != null && (
+                {displayPrice != null && (
                   <span className="flex items-center gap-1.5 font-semibold text-foreground">
                     <Euro className="h-4 w-4" />
-                    {property.nightly_rate}/night
+                    {displayPrice}{priceUnit}
                   </span>
                 )}
               </div>
@@ -467,146 +505,216 @@ export default function PublicProperty() {
 
             {property.description && (
               <div>
-                <h2 className="font-bold text-lg mb-2">About this property</h2>
+                <h2 className="font-bold text-lg mb-2">Descrizione</h2>
                 <p className="text-muted-foreground leading-relaxed">{property.description}</p>
               </div>
             )}
 
-            <div>
-              <h2 className="font-bold text-lg mb-4">Amenities</h2>
-              <div className="grid grid-cols-2 gap-3">
-                {AMENITIES.map(({ icon: Icon, label }) => (
-                  <div key={label} className="flex items-center gap-2.5 text-sm">
-                    <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-                      <Icon className="h-4 w-4 text-primary" />
-                    </div>
-                    {label}
+            {/* Temporada: utilities included */}
+            {isTemporadaType && temporadaConfig && (
+              <div>
+                <h2 className="font-bold text-lg mb-4">Spese incluse nel canone</h2>
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { key: "internetIncluded", icon: Wifi, label: "Internet" },
+                    { key: "electricityIncluded", icon: Zap, label: "Luce" },
+                    { key: "waterIncluded", icon: Droplets, label: "Acqua" },
+                    { key: "communityFeesIncluded", icon: Building2, label: "Spese comunità" },
+                  ].map(({ key, icon: Icon, label }) => {
+                    const included = temporadaConfig[key as keyof typeof temporadaConfig] as boolean;
+                    return (
+                      <div key={key} className={`flex items-center gap-2.5 text-sm rounded-lg border px-3 py-2.5 ${included ? "bg-green-50 border-green-200 text-green-800" : "bg-muted/30 border-muted text-muted-foreground"}`}>
+                        <div className={`h-7 w-7 rounded-md flex items-center justify-center flex-shrink-0 ${included ? "bg-green-100" : "bg-muted"}`}>
+                          <Icon className={`h-3.5 w-3.5 ${included ? "text-green-600" : "text-muted-foreground"}`} />
+                        </div>
+                        <div>
+                          <span className="font-medium">{label}</span>
+                          <span className={`ml-1.5 text-xs ${included ? "text-green-700" : "text-muted-foreground"}`}>
+                            {included ? "Inclusa" : "Non inclusa"}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {rentalType === "media-temporada" && temporadaConfig.maxDurationMonths && (
+                  <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
+                    <Clock className="h-4 w-4" />
+                    Durata massima: <span className="font-medium text-foreground">{temporadaConfig.maxDurationMonths} {temporadaConfig.maxDurationMonths === 1 ? "mese" : "mesi"}</span>
                   </div>
-                ))}
+                )}
               </div>
-            </div>
+            )}
 
-            <div>
-              <h2 className="font-bold text-lg mb-4">Availability</h2>
-              <div className="rounded-xl border bg-card p-4 inline-block">
-                <MiniCalendar bookedRanges={bookedRanges} />
+            {/* Vacacional: standard amenities */}
+            {!isTemporadaType && (
+              <div>
+                <h2 className="font-bold text-lg mb-4">Dotazioni</h2>
+                <div className="grid grid-cols-2 gap-3">
+                  {AMENITIES.map(({ icon: Icon, label }) => (
+                    <div key={label} className="flex items-center gap-2.5 text-sm">
+                      <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                        <Icon className="h-4 w-4 text-primary" />
+                      </div>
+                      {label}
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
+
+            {/* Vacacional: availability calendar */}
+            {!isTemporadaType && (
+              <div>
+                <h2 className="font-bold text-lg mb-4">Disponibilità</h2>
+                <div className="rounded-xl border bg-card p-4 inline-block">
+                  <MiniCalendar bookedRanges={bookedRanges} />
+                </div>
+              </div>
+            )}
           </div>
 
+          {/* Right sidebar */}
           <div>
             <div className="sticky top-20 rounded-2xl border bg-card shadow-md p-6 space-y-5">
               <div className="text-center">
-                {property.nightly_rate != null && (
+                {displayPrice != null ? (
                   <div className="flex items-baseline justify-center gap-1">
-                    <span className="text-3xl font-extrabold text-primary">
-                      €{property.nightly_rate}
-                    </span>
-                    <span className="text-muted-foreground text-sm">/ night</span>
+                    <span className="text-3xl font-extrabold text-primary">€{displayPrice}</span>
+                    <span className="text-muted-foreground text-sm">{priceUnit}</span>
                   </div>
+                ) : (
+                  <p className="text-lg font-semibold text-muted-foreground">Prezzo su richiesta</p>
                 )}
                 <div className="flex items-center justify-center gap-1 text-yellow-500 mt-1">
                   <Star className="h-3.5 w-3.5 fill-current" />
-                  <span className="text-sm font-medium text-foreground">4.9 · Excellent</span>
+                  <span className="text-sm font-medium text-foreground">4.9 · Eccellente</span>
                 </div>
               </div>
 
               <Separator />
 
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                    Check-in
-                  </label>
-                  <input
-                    type="date"
-                    min={today}
-                    value={watchStart}
-                    onChange={(e) => form.setValue("startDate", e.target.value, { shouldValidate: true })}
-                    className="mt-1 w-full text-sm border rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary bg-background"
-                    data-testid="quick-start-date"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                    Check-out
-                  </label>
-                  <input
-                    type="date"
-                    min={watchStart || today}
-                    value={watchEnd}
-                    onChange={(e) => form.setValue("endDate", e.target.value, { shouldValidate: true })}
-                    className="mt-1 w-full text-sm border rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary bg-background"
-                    data-testid="quick-end-date"
-                  />
-                </div>
-              </div>
-
-              {nights > 0 && estimatedTotal !== null && (
-                <div className="rounded-lg bg-muted/50 p-3 space-y-1.5 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">
-                      €{property.nightly_rate} × {nights} night{nights !== 1 ? "s" : ""}
-                    </span>
-                    <span>€{estimatedTotal.toFixed(2)}</span>
+              {isTemporadaType ? (
+                /* Temporada: inquiry widget */
+                <div className="space-y-4">
+                  <div className="rounded-lg bg-muted/40 p-3 text-sm text-muted-foreground space-y-1.5">
+                    <p className="font-medium text-foreground">
+                      {rentalType === "media-temporada" ? "Affitto medio termine" : "Affitto lungo termine"}
+                    </p>
+                    <p>
+                      {rentalType === "media-temporada"
+                        ? "Contatta il proprietario per verificare disponibilità e concordare il contratto."
+                        : "Contatta il proprietario per condizioni, disponibilità e contratto di locazione."}
+                    </p>
                   </div>
-                  {property.igicEnabled && (
-                    <div className="flex justify-between text-muted-foreground">
-                      <span>IGIC (7%)</span>
-                      <span>€{(estimatedTotal * 0.07).toFixed(2)}</span>
+
+                  <Button
+                    className="w-full h-11 text-base font-bold"
+                    onClick={() => setShowInquiryForm(true)}
+                  >
+                    <MessageSquare className="h-4 w-4 mr-2" />
+                    Richiedi informazioni
+                  </Button>
+
+                  <div className="space-y-2">
+                    {[
+                      "Nessuna commissione di agenzia",
+                      "Risposta diretta dal proprietario",
+                      "Contratto personalizzabile",
+                    ].map((item) => (
+                      <div key={item} className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <CheckCircle2 className="h-3.5 w-3.5 text-green-600 flex-shrink-0" />
+                        {item}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                /* Vacacional: booking widget */
+                <>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Check-in</label>
+                      <input
+                        type="date"
+                        min={today}
+                        value={watchStart}
+                        onChange={(e) => form.setValue("startDate", e.target.value, { shouldValidate: true })}
+                        className="mt-1 w-full text-sm border rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary bg-background"
+                        data-testid="quick-start-date"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Check-out</label>
+                      <input
+                        type="date"
+                        min={watchStart || today}
+                        value={watchEnd}
+                        onChange={(e) => form.setValue("endDate", e.target.value, { shouldValidate: true })}
+                        className="mt-1 w-full text-sm border rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary bg-background"
+                        data-testid="quick-end-date"
+                      />
+                    </div>
+                  </div>
+
+                  {nights > 0 && estimatedTotal !== null && (
+                    <div className="rounded-lg bg-muted/50 p-3 space-y-1.5 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">€{property.nightly_rate} × {nights} notte{nights !== 1 ? "i" : ""}</span>
+                        <span>€{estimatedTotal.toFixed(2)}</span>
+                      </div>
+                      {property.igicEnabled && (
+                        <div className="flex justify-between text-muted-foreground">
+                          <span>IGIC (7%)</span>
+                          <span>€{(estimatedTotal * 0.07).toFixed(2)}</span>
+                        </div>
+                      )}
+                      <Separator />
+                      <div className="flex justify-between font-bold">
+                        <span>Totale</span>
+                        <span className="text-primary">€{(property.igicEnabled ? estimatedTotal * 1.07 : estimatedTotal).toFixed(2)}</span>
+                      </div>
                     </div>
                   )}
-                  <Separator />
-                  <div className="flex justify-between font-bold">
-                    <span>Total</span>
-                    <span className="text-primary">
-                      €{(property.igicEnabled ? estimatedTotal * 1.07 : estimatedTotal).toFixed(2)}
-                    </span>
+
+                  <Button
+                    className="w-full h-11 text-base font-bold"
+                    onClick={handleBookClick}
+                    disabled={!watchStart || !watchEnd || nights <= 0}
+                    data-testid="button-book-now"
+                  >
+                    <CalendarDays className="h-4 w-4 mr-2" />
+                    {!watchStart || !watchEnd
+                      ? "Seleziona le date"
+                      : isLoggedIn ? "Prenota ora" : "Accedi per prenotare"}
+                  </Button>
+
+                  <div className="space-y-2">
+                    {["No booking fees", "Instant confirmation email", "Direct contact with owner"].map((item) => (
+                      <div key={item} className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <CheckCircle2 className="h-3.5 w-3.5 text-green-600 flex-shrink-0" />
+                        {item}
+                      </div>
+                    ))}
                   </div>
-                </div>
+                </>
               )}
-
-              <Button
-                className="w-full h-11 text-base font-bold"
-                onClick={handleBookClick}
-                disabled={!watchStart || !watchEnd || nights <= 0}
-                data-testid="button-book-now"
-              >
-                <CalendarDays className="h-4 w-4 mr-2" />
-                {!watchStart || !watchEnd
-                  ? "Seleziona le date"
-                  : isLoggedIn
-                  ? "Prenota ora"
-                  : "Accedi per prenotare"}
-              </Button>
-
-              <div className="space-y-2">
-                {[
-                  "No booking fees",
-                  "Instant confirmation email",
-                  "Direct contact with owner",
-                ].map((item) => (
-                  <div key={item} className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-green-600 flex-shrink-0" />
-                    {item}
-                  </div>
-                ))}
-              </div>
             </div>
           </div>
         </div>
       </div>
 
+      {/* Vacacional: booking form dialog */}
       <Dialog open={showBookingForm} onOpenChange={setShowBookingForm}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Complete your booking</DialogTitle>
+            <DialogTitle>Completa la prenotazione</DialogTitle>
             <DialogDescription>
               {nights > 0 && (
                 <>
-                  {property.name} · {nights} night{nights !== 1 ? "s" : ""} ·{" "}
-                  {watchStart && format(parseISO(watchStart), "MMM d")} –{" "}
-                  {watchEnd && format(parseISO(watchEnd), "MMM d, yyyy")}
+                  {property.name} · {nights} notte{nights !== 1 ? "i" : ""} ·{" "}
+                  {watchStart && format(parseISO(watchStart), "d MMM")} –{" "}
+                  {watchEnd && format(parseISO(watchEnd), "d MMM yyyy")}
                 </>
               )}
             </DialogDescription>
@@ -614,109 +722,64 @@ export default function PublicProperty() {
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-2">
               <div className="grid grid-cols-2 gap-3">
-                <FormField
-                  control={form.control}
-                  name="firstName"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>First name</FormLabel>
-                      <FormControl>
-                        <Input {...field} autoFocus data-testid="input-first-name" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="lastName"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Last name</FormLabel>
-                      <FormControl>
-                        <Input {...field} data-testid="input-last-name" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <FormField control={form.control} name="firstName" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nome</FormLabel>
+                    <FormControl><Input {...field} autoFocus data-testid="input-first-name" /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="lastName" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Cognome</FormLabel>
+                    <FormControl><Input {...field} data-testid="input-last-name" /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
               </div>
-              <FormField
-                control={form.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Email address</FormLabel>
-                    <FormControl>
-                      <Input type="email" {...field} data-testid="input-email" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="phone"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Phone number</FormLabel>
-                    <FormControl>
-                      <Input type="tel" placeholder="+34 ..." {...field} data-testid="input-phone" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <FormField control={form.control} name="email" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Email</FormLabel>
+                  <FormControl><Input type="email" {...field} data-testid="input-email" /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="phone" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Telefono</FormLabel>
+                  <FormControl><Input type="tel" placeholder="+34 ..." {...field} data-testid="input-phone" /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
               <div className="grid grid-cols-2 gap-3">
-                <FormField
-                  control={form.control}
-                  name="startDate"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Check-in</FormLabel>
-                      <FormControl>
-                        <Input type="date" min={today} {...field} data-testid="input-start-date" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="endDate"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Check-out</FormLabel>
-                      <FormControl>
-                        <Input type="date" min={watchStart || today} {...field} data-testid="input-end-date" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              <FormField
-                control={form.control}
-                name="notes"
-                render={({ field }) => (
+                <FormField control={form.control} name="startDate" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Message (optional)</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        rows={3}
-                        placeholder="Any special requests or questions for the owner..."
-                        {...field}
-                        data-testid="textarea-notes"
-                      />
-                    </FormControl>
+                    <FormLabel>Check-in</FormLabel>
+                    <FormControl><Input type="date" min={today} {...field} data-testid="input-start-date" /></FormControl>
                     <FormMessage />
                   </FormItem>
-                )}
-              />
+                )} />
+                <FormField control={form.control} name="endDate" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Check-out</FormLabel>
+                    <FormControl><Input type="date" min={watchStart || today} {...field} data-testid="input-end-date" /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              </div>
+              <FormField control={form.control} name="notes" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Messaggio (opzionale)</FormLabel>
+                  <FormControl>
+                    <Textarea rows={3} placeholder="Richieste speciali o domande per il proprietario..." {...field} data-testid="textarea-notes" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
 
               {estimatedTotal !== null && nights > 0 && (
                 <div className="rounded-lg bg-muted/50 p-3 text-sm font-medium flex justify-between">
-                  <span>Estimated total ({nights} night{nights !== 1 ? "s" : ""})</span>
+                  <span>Totale stimato ({nights} notte{nights !== 1 ? "i" : ""})</span>
                   <span className="text-primary font-bold">
                     €{(property.igicEnabled ? estimatedTotal * 1.07 : estimatedTotal).toFixed(2)}
                   </span>
@@ -729,14 +792,7 @@ export default function PublicProperty() {
                   <div>
                     <p className="font-semibold">Date non disponibili</p>
                     <p className="mt-0.5">{bookingError}</p>
-                    <button
-                      type="button"
-                      className="mt-2 underline font-medium"
-                      onClick={() => {
-                        setBookingError(null);
-                        setShowBookingForm(false);
-                      }}
-                    >
+                    <button type="button" className="mt-2 underline font-medium" onClick={() => { setBookingError(null); setShowBookingForm(false); }}>
                       Scegli altre date →
                     </button>
                   </div>
@@ -744,18 +800,8 @@ export default function PublicProperty() {
               )}
 
               <DialogFooter className="pt-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => { setBookingError(null); setShowBookingForm(false); }}
-                >
-                  Annulla
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={createBooking.isPending}
-                  data-testid="button-submit-booking"
-                >
+                <Button type="button" variant="outline" onClick={() => { setBookingError(null); setShowBookingForm(false); }}>Annulla</Button>
+                <Button type="submit" disabled={createBooking.isPending} data-testid="button-submit-booking">
                   {createBooking.isPending ? "Invio in corso..." : "Conferma richiesta"}
                 </Button>
               </DialogFooter>
@@ -764,6 +810,7 @@ export default function PublicProperty() {
         </DialogContent>
       </Dialog>
 
+      {/* Vacacional: confirmed dialog */}
       <Dialog open={confirmed} onOpenChange={setConfirmed}>
         <DialogContent className="max-w-sm text-center">
           <div className="pt-4 pb-2 flex flex-col items-center gap-4">
@@ -771,103 +818,130 @@ export default function PublicProperty() {
               <CheckCircle2 className="h-8 w-8 text-green-600" />
             </div>
             <DialogHeader>
-              <DialogTitle className="text-xl">Booking request received!</DialogTitle>
+              <DialogTitle className="text-xl">Prenotazione ricevuta!</DialogTitle>
               <DialogDescription className="mt-2">
-                Your booking request for{" "}
-                <span className="font-semibold text-foreground">{property.name}</span> has been
-                submitted. The owner will confirm shortly via email.
+                La tua richiesta per{" "}
+                <span className="font-semibold text-foreground">{property.name}</span> è stata inviata. Il proprietario ti confermerà via email.
               </DialogDescription>
             </DialogHeader>
             <div className="bg-muted rounded-xl px-6 py-4 w-full">
-              <p className="text-xs text-muted-foreground mb-1">Reference number</p>
+              <p className="text-xs text-muted-foreground mb-1">Numero di riferimento</p>
               <p className="text-2xl font-bold tracking-widest text-primary" data-testid="text-booking-ref">
                 {confirmedRef}
               </p>
             </div>
             <div className="flex flex-col gap-2 w-full">
-              <Button
-                className="w-full"
-                onClick={() => {
-                  setConfirmed(false);
-                  setLocation("/stay");
-                }}
-                data-testid="button-back-home"
-              >
-                Browse more properties
+              <Button className="w-full" onClick={() => { setConfirmed(false); setLocation("/stay"); }} data-testid="button-back-home">
+                Esplora altre proprietà
               </Button>
             </div>
           </div>
         </DialogContent>
       </Dialog>
 
-      <CustomerAuthModal
-        open={showAuthModal}
-        onOpenChange={setShowAuthModal}
-        onSuccess={handleAuthSuccess}
-      />
+      {/* Temporada: inquiry dialog */}
+      <Dialog open={showInquiryForm} onOpenChange={setShowInquiryForm}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Richiesta informazioni</DialogTitle>
+            <DialogDescription>
+              {property.name} · {typeLabel}
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...inquiryForm}>
+            <form onSubmit={inquiryForm.handleSubmit(onInquirySubmit)} className="space-y-4 pt-2">
+              <FormField control={inquiryForm.control} name="name" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Nome e cognome</FormLabel>
+                  <FormControl><Input {...field} placeholder="Mario Rossi" autoFocus /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={inquiryForm.control} name="email" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Email</FormLabel>
+                  <FormControl><Input type="email" {...field} placeholder="mario@email.com" /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={inquiryForm.control} name="phone" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Telefono</FormLabel>
+                  <FormControl><Input type="tel" {...field} placeholder="+34 ..." /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={inquiryForm.control} name="message" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Messaggio (opzionale)</FormLabel>
+                  <FormControl>
+                    <Textarea rows={3} placeholder="Periodo desiderato, durata, domande..." {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setShowInquiryForm(false)}>Annulla</Button>
+                <Button type="submit">
+                  <MessageSquare className="h-4 w-4 mr-2" />
+                  Invia richiesta
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Temporada: inquiry sent dialog */}
+      <Dialog open={inquirySent} onOpenChange={setInquirySent}>
+        <DialogContent className="max-w-sm text-center">
+          <div className="pt-4 pb-2 flex flex-col items-center gap-4">
+            <div className="h-16 w-16 rounded-full bg-green-100 flex items-center justify-center">
+              <CheckCircle2 className="h-8 w-8 text-green-600" />
+            </div>
+            <DialogHeader>
+              <DialogTitle className="text-xl">Richiesta inviata!</DialogTitle>
+              <DialogDescription className="mt-2">
+                La tua richiesta per{" "}
+                <span className="font-semibold text-foreground">{property.name}</span> è stata ricevuta. Il proprietario ti contatterà al più presto.
+              </DialogDescription>
+            </DialogHeader>
+            <Button className="w-full" onClick={() => { setInquirySent(false); setLocation(`/stay/${rentalType}`); }}>
+              Torna a {typeLabel}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <CustomerAuthModal open={showAuthModal} onOpenChange={setShowAuthModal} onSuccess={handleAuthSuccess} />
 
       {/* Lightbox */}
       {lightboxIdx !== null && property?.photos && property.photos.length > 0 && (() => {
         const photos = property.photos;
         const li = lightboxIdx;
         return (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/95"
-            onClick={closeLightbox}
-          >
-            {/* Close */}
-            <button
-              onClick={closeLightbox}
-              className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/25 text-white transition-colors z-10"
-              aria-label="Chiudi"
-            >
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95" onClick={closeLightbox}>
+            <button onClick={closeLightbox} className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/25 text-white transition-colors z-10" aria-label="Chiudi">
               <X className="h-6 w-6" />
             </button>
-
-            {/* Counter */}
             <span className="absolute top-5 left-1/2 -translate-x-1/2 text-white/70 text-sm font-medium z-10">
               {li + 1} / {photos.length}
             </span>
-
-            {/* Prev */}
             {photos.length > 1 && (
-              <button
-                onClick={(e) => { e.stopPropagation(); setLightboxIdx((i) => i !== null ? (i - 1 + photos.length) % photos.length : i); }}
-                className="absolute left-4 top-1/2 -translate-y-1/2 p-3 rounded-full bg-white/10 hover:bg-white/25 text-white transition-colors z-10"
-                aria-label="Foto precedente"
-              >
+              <button onClick={(e) => { e.stopPropagation(); setLightboxIdx((i) => i !== null ? (i - 1 + photos.length) % photos.length : i); }} className="absolute left-4 top-1/2 -translate-y-1/2 p-3 rounded-full bg-white/10 hover:bg-white/25 text-white transition-colors z-10" aria-label="Foto precedente">
                 <ChevronLeft className="h-7 w-7" />
               </button>
             )}
-
-            {/* Image */}
-            <img
-              src={photos[li]}
-              alt={`${property.name} — foto ${li + 1}`}
-              className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg shadow-2xl select-none"
-              onClick={(e) => e.stopPropagation()}
-            />
-
-            {/* Next */}
+            <img src={photos[li]} alt={`${property.name} — foto ${li + 1}`} className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg shadow-2xl select-none" onClick={(e) => e.stopPropagation()} />
             {photos.length > 1 && (
-              <button
-                onClick={(e) => { e.stopPropagation(); setLightboxIdx((i) => i !== null ? (i + 1) % photos.length : i); }}
-                className="absolute right-4 top-1/2 -translate-y-1/2 p-3 rounded-full bg-white/10 hover:bg-white/25 text-white transition-colors z-10"
-                aria-label="Foto successiva"
-              >
+              <button onClick={(e) => { e.stopPropagation(); setLightboxIdx((i) => i !== null ? (i + 1) % photos.length : i); }} className="absolute right-4 top-1/2 -translate-y-1/2 p-3 rounded-full bg-white/10 hover:bg-white/25 text-white transition-colors z-10" aria-label="Foto successiva">
                 <ChevronRight className="h-7 w-7" />
               </button>
             )}
-
-            {/* Thumbnail strip */}
             {photos.length > 1 && (
               <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 overflow-x-auto max-w-[90vw] px-2">
                 {photos.map((url, i) => (
-                  <button
-                    key={i}
-                    onClick={(e) => { e.stopPropagation(); setLightboxIdx(i); }}
-                    className={`flex-shrink-0 w-14 h-10 rounded-md overflow-hidden border-2 transition-all ${i === li ? "border-white scale-110" : "border-white/30 opacity-50 hover:opacity-80"}`}
-                  >
+                  <button key={i} onClick={(e) => { e.stopPropagation(); setLightboxIdx(i); }} className={`flex-shrink-0 w-14 h-10 rounded-md overflow-hidden border-2 transition-all ${i === li ? "border-white scale-110" : "border-white/30 opacity-50 hover:opacity-80"}`}>
                     <img src={url} alt="" className="w-full h-full object-cover" />
                   </button>
                 ))}

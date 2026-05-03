@@ -16,6 +16,7 @@ import CalendarPage from "@/pages/CalendarPage";
 import Users from "@/pages/Users";
 
 import PublicLanding from "@/pages/PublicLanding";
+import PublicSection from "@/pages/PublicSection";
 import PublicProperty from "@/pages/PublicProperty";
 
 const queryClient = new QueryClient();
@@ -24,6 +25,18 @@ function Router() {
   return (
     <Switch>
       <Route path="/stay" component={PublicLanding} />
+
+      {/* Rental type sections — must be BEFORE the /stay/:id wildcard */}
+      <Route path="/stay/vacacional">
+        {() => <PublicSection type="vacacional" />}
+      </Route>
+      <Route path="/stay/media-temporada">
+        {() => <PublicSection type="media-temporada" />}
+      </Route>
+      <Route path="/stay/larga-temporada">
+        {() => <PublicSection type="larga-temporada" />}
+      </Route>
+
       <Route path="/stay/:id" component={PublicProperty} />
 
       <Route>

@@ -1,0 +1,67 @@
+Ora che il backend/back-office supporta le tipologie di affitto, voglio modificare il front-end pubblico.
+
+IMPORTANTE:
+Non modificare il back-office.
+Non modificare la gestione host.
+Non modificare la gestione ruoli.
+Non modificare la struttura dati già creata nello step precedente.
+
+Obiettivo:
+creare nel front-end pubblico tre sezioni distinte:
+
+1. Vacational
+2. Media temporada
+3. Larga temporada
+
+L’utente deve poter scegliere quale sezione visitare.
+
+Requisiti front-end:
+
+- Aggiungere nella homepage o nel menu principale tre accessi chiari:
+  - Vacational
+  - Media temporada
+  - Larga temporada
+
+- Ogni sezione deve mostrare solo le proprietà pubblicate per quella tipologia.
+
+Regole:
+- se una proprietà ha attiva la tipologia Vacational, deve apparire nella sezione Vacational
+- se una proprietà ha attiva la tipologia Media temporada, deve apparire nella sezione Media temporada
+- se una proprietà ha attiva la tipologia Larga temporada, deve apparire nella sezione Larga temporada
+- se una proprietà ha più tipologie attive, deve apparire in tutte le sezioni corrispondenti
+
+Visualizzazione prezzo:
+- nella sezione Vacational mostrare il prezzo giornaliero
+- nella sezione Media temporada mostrare il prezzo mensile media temporada
+- nella sezione Larga temporada mostrare il prezzo mensile larga temporada
+
+Scheda dettaglio proprietà:
+- mostrare la tipologia di affitto selezionata
+- mostrare il prezzo corretto in base alla sezione da cui arriva l’utente
+- per Media temporada e Larga temporada mostrare:
+  - internet incluso sì/no
+  - luce inclusa sì/no
+  - acqua inclusa sì/no
+  - spese comunità incluse sì/no
+
+Prenotazione:
+- mantenere invariato il flusso di prenotazione esistente per Vacational
+- per Media temporada e Larga temporada, per ora NON creare prenotazione immediata
+- per Media temporada e Larga temporada aggiungere invece un bottone:
+  “Richiedi informazioni”
+  oppure
+  “Contatta per disponibilità”
+
+Vincoli:
+- non rompere il funzionamento attuale di Vacational
+- non modificare la logica di login utenti
+- non modificare il back-office
+- non modificare i permessi admin/host
+
+Obiettivo finale:
+permettere agli utenti pubblici di navigare il sito scegliendo tra:
+- affitto vacational
+- affitto media temporada
+- affitto larga temporada
+
+mostrando in ogni sezione solo le proprietà corrette e il prezzo corretto.

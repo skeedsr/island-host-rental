@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Link } from "wouter";
-import { Home, User, LogOut, ChevronDown } from "lucide-react";
+import { Link, useLocation } from "wouter";
+import { Home, User, LogOut, ChevronDown, Star, Clock, Building2 } from "lucide-react";
 import { Toaster } from "@/components/ui/sonner";
 import { useCustomerAuth } from "@/hooks/use-customer-auth";
 import { CustomerAuthModal } from "@/components/CustomerAuthModal";
@@ -17,15 +17,24 @@ interface PublicLayoutProps {
   children: React.ReactNode;
 }
 
+const SECTIONS = [
+  { href: "/stay/vacacional", label: "Vacacional", icon: Star, color: "text-blue-600" },
+  { href: "/stay/media-temporada", label: "Media Temporada", icon: Clock, color: "text-emerald-600" },
+  { href: "/stay/larga-temporada", label: "Larga Temporada", icon: Building2, color: "text-amber-600" },
+];
+
 export function PublicLayout({ children }: PublicLayoutProps) {
   const { customer, isLoggedIn, logout } = useCustomerAuth();
   const [showAuth, setShowAuth] = useState(false);
+  const [location] = useLocation();
+
+  const activeSection = SECTIONS.find((s) => location.startsWith(s.href));
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <header className="sticky top-0 z-50 border-b bg-white/90 backdrop-blur-sm">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-          <Link href="/stay" className="flex items-center gap-2.5 group no-underline">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
+          <Link href="/stay" className="flex items-center gap-2.5 group no-underline flex-shrink-0">
             <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center flex-shrink-0">
               <Home className="h-4 w-4 text-white" />
             </div>
@@ -34,11 +43,58 @@ export function PublicLayout({ children }: PublicLayoutProps) {
             </span>
           </Link>
 
-          <nav className="flex items-center gap-4 text-sm">
-            <Link href="/stay" className="text-muted-foreground hover:text-foreground transition-colors no-underline">
-              Proprietà
-            </Link>
+          {/* Nav sections — desktop */}
+          <nav className="hidden md:flex items-center gap-1 flex-1">
+            {SECTIONS.map(({ href, label, icon: Icon, color }) => {
+              const isActive = location.startsWith(href);
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors no-underline ${
+                    isActive
+                      ? "bg-muted text-foreground"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                  }`}
+                >
+                  <Icon className={`h-3.5 w-3.5 ${isActive ? color : ""}`} />
+                  {label}
+                </Link>
+              );
+            })}
+          </nav>
 
+          {/* Nav sections — mobile dropdown */}
+          <div className="md:hidden flex-1">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="flex items-center gap-1.5 text-sm">
+                  {activeSection ? (
+                    <>
+                      <activeSection.icon className={`h-3.5 w-3.5 ${activeSection.color}`} />
+                      {activeSection.label}
+                    </>
+                  ) : (
+                    "Affitti"
+                  )}
+                  <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-52">
+                {SECTIONS.map(({ href, label, icon: Icon, color }) => (
+                  <DropdownMenuItem key={href} asChild>
+                    <Link href={href} className="flex items-center gap-2 no-underline text-foreground cursor-pointer">
+                      <Icon className={`h-4 w-4 ${color}`} />
+                      {label}
+                    </Link>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+
+          {/* User auth */}
+          <div className="flex-shrink-0">
             {isLoggedIn && customer ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -46,7 +102,7 @@ export function PublicLayout({ children }: PublicLayoutProps) {
                     <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center">
                       <User className="h-3.5 w-3.5 text-primary" />
                     </div>
-                    <span>{customer.firstName}</span>
+                    <span className="hidden sm:inline">{customer.firstName}</span>
                     <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -68,7 +124,7 @@ export function PublicLayout({ children }: PublicLayoutProps) {
                 Accedi
               </Button>
             )}
-          </nav>
+          </div>
         </div>
       </header>
 
