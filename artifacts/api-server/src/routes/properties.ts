@@ -1,6 +1,6 @@
 import { Router } from "express";
 import crypto from "crypto";
-import { db, propertiesTable, bookingsTable } from "@workspace/db";
+import { db, propertiesTable, bookingsTable, propertyAssignmentsTable } from "@workspace/db";
 import { eq, inArray } from "drizzle-orm";
 import {
   CreatePropertyBody,
@@ -54,7 +54,7 @@ router.get("/properties", async (req, res) => {
   res.json(properties.map(mapProperty));
 });
 
-router.post("/properties", requireSuperAdmin, async (req, res) => {
+router.post("/properties", requireAdmin, async (req, res) => {
   const parsed = CreatePropertyBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.flatten() });
@@ -79,6 +79,16 @@ router.post("/properties", requireSuperAdmin, async (req, res) => {
       icalExportToken: token,
     })
     .returning();
+
+  if (
+    req.session.adminRole === "property_manager" &&
+    req.session.adminUserId
+  ) {
+    await db.insert(propertyAssignmentsTable).values({
+      adminUserId: req.session.adminUserId,
+      propertyId: property.id,
+    });
+  }
 
   res.status(201).json(mapProperty(property));
 });
