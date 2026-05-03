@@ -47,7 +47,7 @@ export default function PropertyDetail() {
 
   const handleCopyIcalExport = () => {
     if (!property) return;
-    const url = `${window.location.origin}/api/properties/${property.id}/ical-export?token=${property.icalExportToken}`;
+    const url = `${window.location.origin}/api/properties/${property.id}/calendar.ics?token=${property.icalExportToken}`;
     navigator.clipboard.writeText(url);
     toast.success("iCal export URL copied to clipboard");
   };
@@ -348,7 +348,7 @@ export default function PropertyDetail() {
                       <Input 
                         id="export-url" 
                         readOnly 
-                        value={`${window.location.origin}/api/properties/${property.id}/ical-export?token=${property.icalExportToken}`} 
+                        value={`${window.location.origin}/api/properties/${property.id}/calendar.ics?token=${property.icalExportToken}`} 
                         className="font-mono text-xs bg-muted"
                       />
                       <Button variant="secondary" onClick={handleCopyIcalExport}>

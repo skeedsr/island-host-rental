@@ -252,7 +252,15 @@ router.post("/properties/:id/sync", requireAdmin, async (req, res) => {
   });
 });
 
-router.get("/properties/:id/ical-export", async (req, res) => {
+// Legacy path — redirect to the canonical .ics URL so old links keep working
+router.get("/properties/:id/ical-export", (req, res) => {
+  const { id } = req.params;
+  const token = req.query.token ?? "";
+  res.redirect(301, `/api/properties/${id}/calendar.ics?token=${token}`);
+});
+
+// Canonical iCal export — URL ends with .ics for Airbnb / Google / Apple compatibility
+router.get("/properties/:id/calendar.ics", async (req, res) => {
   const paramsParsed = ExportPropertyIcalParams.safeParse({
     id: Number(req.params.id),
   });
@@ -285,7 +293,7 @@ router.get("/properties/:id/ical-export", async (req, res) => {
   res.setHeader("Content-Type", "text/calendar; charset=utf-8");
   res.setHeader(
     "Content-Disposition",
-    `attachment; filename="${property.name}.ics"`,
+    `inline; filename="property-${property.id}.ics"`,
   );
   res.send(ical);
 });
