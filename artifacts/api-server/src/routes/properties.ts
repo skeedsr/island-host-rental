@@ -95,6 +95,16 @@ router.post("/properties", requireAdmin, async (req, res) => {
   res.status(201).json(mapProperty(property));
 });
 
+// Public endpoint — always returns all properties regardless of session/admin role.
+// Used by the customer-facing /stay pages so that admin sessions never filter the list.
+router.get("/properties/public", async (_req, res) => {
+  const properties = await db
+    .select()
+    .from(propertiesTable)
+    .orderBy(propertiesTable.createdAt);
+  res.json(properties.map(mapProperty));
+});
+
 router.get("/properties/:id", async (req, res) => {
   const parsed = GetPropertyParams.safeParse({ id: Number(req.params.id) });
   if (!parsed.success) {

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "wouter";
-import { useListProperties } from "@workspace/api-client-react";
+import { usePublicProperties } from "@/hooks/use-public-properties";
 import { PublicLayout } from "@/components/layout/PublicLayout";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -25,7 +25,7 @@ function getPropertyImage(location: string): string {
 
 export default function PublicLanding() {
   const [search, setSearch] = useState("");
-  const { data: properties, isLoading } = useListProperties();
+  const { data: properties, isLoading } = usePublicProperties();
 
   const filtered = (properties ?? []).filter(
     (p) =>

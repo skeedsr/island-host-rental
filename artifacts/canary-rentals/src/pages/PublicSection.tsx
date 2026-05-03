@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "wouter";
-import { useListProperties } from "@workspace/api-client-react";
+import { usePublicProperties } from "@/hooks/use-public-properties";
 import { PublicLayout } from "@/components/layout/PublicLayout";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -62,7 +62,7 @@ interface Props {
 
 export default function PublicSection({ type }: Props) {
   const [search, setSearch] = useState("");
-  const { data: allProperties, isLoading } = useListProperties();
+  const { data: allProperties, isLoading } = usePublicProperties();
 
   const filtered = (allProperties ?? [])
     .filter((p) => hasRentalType(p.rentalTypes, type))
