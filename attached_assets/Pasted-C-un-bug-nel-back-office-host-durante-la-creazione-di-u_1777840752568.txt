@@ -1,0 +1,52 @@
+C’è un bug nel back-office host durante la creazione di una nuova proprietà.
+
+Situazione attuale:
+- un host/property_manager crea una nuova casa dal suo back-office
+- la casa viene creata e salvata correttamente
+- però non viene assegnata automaticamente all’host che l’ha creata
+- quindi l’host non la vede tra le sue proprietà
+- serve l’intervento manuale del super_admin per assegnargliela
+
+Questo comportamento è sbagliato.
+
+Comportamento desiderato:
+quando un host/property_manager crea una nuova proprietà, quella proprietà deve essere automaticamente assegnata all’host loggato che l’ha creata.
+
+Requisiti:
+- durante il salvataggio della nuova proprietà, recuperare l’ID dell’utente loggato
+- se l’utente loggato ha ruolo host/property_manager, assegnare automaticamente la nuova proprietà a lui
+- impostare correttamente il campo di relazione usato dal sistema, ad esempio:
+  - owner_id
+  - host_id
+  - user_id
+  - property_manager_id
+  - oppure la tabella di relazione utenti/proprietà, se il sistema usa una relazione many-to-many
+
+Comportamento dopo il salvataggio:
+- mostrare messaggio “Proprietà creata con successo”
+- reindirizzare alla lista proprietà dell’host
+- la nuova proprietà deve comparire subito nella lista dell’host
+
+Regole permessi:
+- l’host non deve poter scegliere o cambiare l’assegnatario della proprietà
+- l’host non deve poter assegnare la proprietà ad altri host
+- l’host continua a vedere solo le proprietà assegnate a lui
+- il super_admin continua a vedere tutte le proprietà
+- il super_admin può successivamente assegnare la proprietà anche ad altri host, se il sistema supporta più assegnazioni
+- se il super_admin crea una proprietà, può lasciarla non assegnata oppure assegnarla manualmente
+
+Importante:
+verificare sia:
+- la funzione di creazione proprietà
+- le policy/regole di sicurezza
+- i filtri della lista proprietà host
+- la relazione tra utenti e proprietà
+
+Vincoli:
+- non modificare il front-end pubblico
+- non modificare il login
+- non modificare il flusso di prenotazione
+- non modificare la gestione ruoli già esistente, salvo quanto necessario per correggere questa assegnazione automatica
+
+Obiettivo:
+ogni proprietà creata da un host deve essere automaticamente collegata a quell’host e visibile subito nel suo back-office.

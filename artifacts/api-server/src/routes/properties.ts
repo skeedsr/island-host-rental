@@ -82,14 +82,21 @@ router.post("/properties", requireAdmin, async (req, res) => {
     })
     .returning();
 
-  if (
-    req.session.adminRole === "property_manager" &&
-    req.session.adminUserId
-  ) {
-    await db.insert(propertyAssignmentsTable).values({
-      adminUserId: req.session.adminUserId,
-      propertyId: property.id,
-    });
+  // Auto-assign the new property to the host who created it.
+  // Covers both session types: system-admin-account (adminUserId) and
+  // customer-with-host-role (customerId).
+  if (req.session.adminRole === "property_manager") {
+    if (req.session.adminUserId) {
+      await db.insert(propertyAssignmentsTable).values({
+        adminUserId: req.session.adminUserId,
+        propertyId: property.id,
+      });
+    } else if (req.session.customerId) {
+      await db.insert(propertyAssignmentsTable).values({
+        customerId: req.session.customerId,
+        propertyId: property.id,
+      });
+    }
   }
 
   res.status(201).json(mapProperty(property));
