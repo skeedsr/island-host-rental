@@ -1,7 +1,7 @@
 import { Router } from "express";
 import crypto from "crypto";
 import { db, propertiesTable, bookingsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import {
   CreatePropertyBody,
   UpdatePropertyBody,
@@ -13,23 +13,48 @@ import {
   ExportPropertyIcalQueryParams,
 } from "@workspace/api-zod";
 import { syncICalFeed, generateICalFeed } from "../lib/ical";
-import { requireAdmin } from "../middlewares/auth";
+import {
+  requireAdmin,
+  requireSuperAdmin,
+  canAccessProperty,
+  getAssignedPropertyIds,
+} from "../middlewares/auth";
 
 const router = Router();
 
-router.get("/properties", async (req, res) => {
-  const properties = await db.select().from(propertiesTable).orderBy(propertiesTable.createdAt);
-  const mapped = properties.map((p) => ({
+function mapProperty(p: typeof propertiesTable.$inferSelect) {
+  return {
     ...p,
     photos: p.photos ?? [],
     icalImportUrls: p.icalImportUrls ?? [],
     nightly_rate: p.nightlyRate,
     max_guests: p.maxGuests,
-  }));
-  res.json(mapped);
+  };
+}
+
+router.get("/properties", async (req, res) => {
+  const assignedIds = await getAssignedPropertyIds(req);
+
+  let properties;
+  if (assignedIds === null) {
+    properties = await db
+      .select()
+      .from(propertiesTable)
+      .orderBy(propertiesTable.createdAt);
+  } else if (assignedIds.length === 0) {
+    properties = [];
+  } else {
+    properties = await db
+      .select()
+      .from(propertiesTable)
+      .where(inArray(propertiesTable.id, assignedIds))
+      .orderBy(propertiesTable.createdAt);
+  }
+
+  res.json(properties.map(mapProperty));
 });
 
-router.post("/properties", requireAdmin, async (req, res) => {
+router.post("/properties", requireSuperAdmin, async (req, res) => {
   const parsed = CreatePropertyBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.flatten() });
@@ -55,11 +80,7 @@ router.post("/properties", requireAdmin, async (req, res) => {
     })
     .returning();
 
-  res.status(201).json({
-    ...property,
-    nightly_rate: property.nightlyRate,
-    max_guests: property.maxGuests,
-  });
+  res.status(201).json(mapProperty(property));
 });
 
 router.get("/properties/:id", async (req, res) => {
@@ -79,19 +100,23 @@ router.get("/properties/:id", async (req, res) => {
     return;
   }
 
-  res.json({
-    ...property,
-    photos: property.photos ?? [],
-    nightly_rate: property.nightlyRate,
-    max_guests: property.maxGuests,
-    icalImportUrls: property.icalImportUrls ?? [],
-  });
+  res.json(mapProperty(property));
 });
 
 router.put("/properties/:id", requireAdmin, async (req, res) => {
-  const paramsParsed = UpdatePropertyParams.safeParse({ id: Number(req.params.id) });
+  const paramsParsed = UpdatePropertyParams.safeParse({
+    id: Number(req.params.id),
+  });
   if (!paramsParsed.success) {
     res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+
+  const propertyId = paramsParsed.data.id;
+
+  const hasAccess = await canAccessProperty(req, propertyId);
+  if (!hasAccess) {
+    res.status(403).json({ error: "Access denied to this property" });
     return;
   }
 
@@ -112,12 +137,13 @@ router.put("/properties/:id", requireAdmin, async (req, res) => {
   if (data.nightly_rate !== undefined) updateData.nightlyRate = data.nightly_rate;
   if (data.max_guests !== undefined) updateData.maxGuests = data.max_guests;
   if (data.photos !== undefined) updateData.photos = data.photos;
-  if (data.icalImportUrls !== undefined) updateData.icalImportUrls = data.icalImportUrls;
+  if (data.icalImportUrls !== undefined)
+    updateData.icalImportUrls = data.icalImportUrls;
 
   const [updated] = await db
     .update(propertiesTable)
     .set(updateData)
-    .where(eq(propertiesTable.id, paramsParsed.data.id))
+    .where(eq(propertiesTable.id, propertyId))
     .returning();
 
   if (!updated) {
@@ -125,29 +151,34 @@ router.put("/properties/:id", requireAdmin, async (req, res) => {
     return;
   }
 
-  res.json({
-    ...updated,
-    nightly_rate: updated.nightlyRate,
-    max_guests: updated.maxGuests,
-    icalImportUrls: updated.icalImportUrls ?? [],
-  });
+  res.json(mapProperty(updated));
 });
 
-router.delete("/properties/:id", requireAdmin, async (req, res) => {
+router.delete("/properties/:id", requireSuperAdmin, async (req, res) => {
   const parsed = DeletePropertyParams.safeParse({ id: Number(req.params.id) });
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid id" });
     return;
   }
 
-  await db.delete(propertiesTable).where(eq(propertiesTable.id, parsed.data.id));
+  await db
+    .delete(propertiesTable)
+    .where(eq(propertiesTable.id, parsed.data.id));
   res.status(204).send();
 });
 
 router.post("/properties/:id/sync", requireAdmin, async (req, res) => {
-  const parsed = SyncPropertyIcalParams.safeParse({ id: Number(req.params.id) });
+  const parsed = SyncPropertyIcalParams.safeParse({
+    id: Number(req.params.id),
+  });
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+
+  const hasAccess = await canAccessProperty(req, parsed.data.id);
+  if (!hasAccess) {
+    res.status(403).json({ error: "Access denied to this property" });
     return;
   }
 
@@ -192,8 +223,12 @@ router.post("/properties/:id/sync", requireAdmin, async (req, res) => {
 });
 
 router.get("/properties/:id/ical-export", async (req, res) => {
-  const paramsParsed = ExportPropertyIcalParams.safeParse({ id: Number(req.params.id) });
-  const queryParsed = ExportPropertyIcalQueryParams.safeParse({ token: req.query.token });
+  const paramsParsed = ExportPropertyIcalParams.safeParse({
+    id: Number(req.params.id),
+  });
+  const queryParsed = ExportPropertyIcalQueryParams.safeParse({
+    token: req.query.token,
+  });
 
   if (!paramsParsed.success || !queryParsed.success) {
     res.status(400).json({ error: "Invalid request" });
@@ -218,7 +253,10 @@ router.get("/properties/:id/ical-export", async (req, res) => {
   const ical = generateICalFeed(property.name, bookings);
 
   res.setHeader("Content-Type", "text/calendar; charset=utf-8");
-  res.setHeader("Content-Disposition", `attachment; filename="${property.name}.ics"`);
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="${property.name}.ics"`,
+  );
   res.send(ical);
 });
 
