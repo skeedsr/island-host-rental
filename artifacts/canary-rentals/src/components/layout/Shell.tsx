@@ -1,6 +1,7 @@
 import { Sidebar } from "./Sidebar";
 import { ReactNode } from "react";
 import { useAuth } from "@/hooks/use-auth";
+import { Toaster } from "@/components/ui/sonner";
 
 interface ShellProps {
   children: ReactNode;
@@ -20,6 +21,7 @@ export function Shell({ children }: ShellProps) {
   return (
     <div className="min-h-[100dvh] bg-background">
       <Sidebar />
+      <Toaster richColors position="top-right" />
       <div className="pl-64 flex flex-col min-h-screen">
         <header className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-x-4 border-b bg-background px-4 shadow-sm sm:gap-x-6 sm:px-6 lg:px-8">
           <div className="flex flex-1 gap-x-4 self-stretch lg:gap-x-6">

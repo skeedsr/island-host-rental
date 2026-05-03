@@ -104,6 +104,7 @@ export default function PropertyFormPage() {
   const [form, setForm] = useState<FormValues>(EMPTY_FORM);
   const [newIcal, setNewIcal] = useState("");
   const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { uploadFile, isUploading, progress } = usePhotoUpload({
@@ -252,8 +253,14 @@ export default function PropertyFormPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError(null);
+
     const err = validate();
-    if (err) { toast.error(err); return; }
+    if (err) {
+      setFormError(err);
+      toast.error(err);
+      return;
+    }
 
     setSaving(true);
     try {
@@ -282,8 +289,16 @@ export default function PropertyFormPage() {
         toast.success("Proprietà creata con successo");
         setLocation(`/properties/${created.id}`);
       }
-    } catch {
-      toast.error(isEdit ? "Errore durante l'aggiornamento" : "Errore durante la creazione");
+    } catch (err: unknown) {
+      const apiErr = err as { data?: { error?: unknown }; status?: number } | undefined;
+      let msg = isEdit ? "Errore durante l'aggiornamento della proprietà." : "Errore durante la creazione della proprietà.";
+      if (apiErr?.status === 400 && apiErr?.data?.error) {
+        msg = `Dati non validi: controlla i campi del form.`;
+      } else if (apiErr?.status === 403) {
+        msg = "Non hai i permessi per modificare questa proprietà.";
+      }
+      setFormError(msg);
+      toast.error(msg);
     } finally {
       setSaving(false);
     }
@@ -764,6 +779,25 @@ export default function PropertyFormPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Inline error banner */}
+        {formError && (
+          <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 flex items-start gap-3 text-sm text-destructive">
+            <span className="mt-0.5 text-base">⚠️</span>
+            <div>
+              <p className="font-semibold">Impossibile salvare</p>
+              <p className="mt-0.5">{formError}</p>
+            </div>
+            <button
+              type="button"
+              className="ml-auto text-destructive/60 hover:text-destructive"
+              onClick={() => setFormError(null)}
+              aria-label="Chiudi"
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         {/* Submit */}
         <div className="flex gap-3 pb-8">
