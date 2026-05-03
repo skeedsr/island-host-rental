@@ -98,6 +98,35 @@ router.post("/auth/logout", (req, res) => {
   });
 });
 
+// Elevate an existing customer session to admin access, without re-authentication.
+// Called by the customer-facing "Area Host" button when the customer has adminRole set.
+router.post("/auth/elevate", async (req, res) => {
+  if (!req.session.customerId) {
+    res.status(401).json({ error: "Nessuna sessione cliente attiva" });
+    return;
+  }
+
+  const [customer] = await db
+    .select({
+      id: customersTable.id,
+      email: customersTable.email,
+      adminRole: customersTable.adminRole,
+    })
+    .from(customersTable)
+    .where(eq(customersTable.id, req.session.customerId));
+
+  if (!customer || !customer.adminRole) {
+    res.status(403).json({ error: "Nessun ruolo admin assegnato a questo account" });
+    return;
+  }
+
+  req.session.isAdmin = true;
+  req.session.adminRole = customer.adminRole as AdminRole;
+  req.session.adminUsername = customer.email;
+
+  res.json({ ok: true, role: customer.adminRole, username: customer.email });
+});
+
 router.get("/auth/me", (req, res) => {
   if (req.session.isAdmin) {
     res.json({

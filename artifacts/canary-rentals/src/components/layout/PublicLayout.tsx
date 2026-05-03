@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Home, User, LogOut, ChevronDown, Star, Clock, Building2, LayoutDashboard } from "lucide-react";
+import { Home, User, LogOut, ChevronDown, Star, Clock, Building2, LayoutDashboard, Loader2 } from "lucide-react";
 import { Toaster } from "@/components/ui/sonner";
+import { toast } from "sonner";
 import { useCustomerAuth } from "@/hooks/use-customer-auth";
 import { CustomerAuthModal } from "@/components/CustomerAuthModal";
 import { Button } from "@/components/ui/button";
@@ -23,10 +24,35 @@ const SECTIONS = [
   { href: "/stay/larga-temporada", label: "Larga Temporada", icon: Building2, color: "text-amber-600" },
 ];
 
+async function elevateToAdmin(): Promise<boolean> {
+  const res = await fetch("/api/auth/elevate", {
+    method: "POST",
+    credentials: "include",
+  });
+  return res.ok;
+}
+
 export function PublicLayout({ children }: PublicLayoutProps) {
   const { customer, isLoggedIn, logout } = useCustomerAuth();
   const [showAuth, setShowAuth] = useState(false);
+  const [elevating, setElevating] = useState(false);
   const [location] = useLocation();
+
+  const handleAreaHost = async () => {
+    setElevating(true);
+    try {
+      const ok = await elevateToAdmin();
+      if (ok) {
+        window.location.href = "/";
+      } else {
+        toast.error("Non hai i permessi per accedere all'area host.");
+        setElevating(false);
+      }
+    } catch {
+      toast.error("Errore di connessione. Riprova.");
+      setElevating(false);
+    }
+  };
 
   const activeSection = SECTIONS.find((s) => location.startsWith(s.href));
 
@@ -113,12 +139,21 @@ export function PublicLayout({ children }: PublicLayoutProps) {
                   </div>
                   <DropdownMenuSeparator />
                   {customer.isHost && (
-                    <DropdownMenuItem asChild>
-                      <a href="/admin" className="flex items-center gap-2 cursor-pointer">
-                        <LayoutDashboard className="h-4 w-4" />
+                    <>
+                      <DropdownMenuItem
+                        onClick={handleAreaHost}
+                        disabled={elevating}
+                        className="cursor-pointer"
+                      >
+                        {elevating ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <LayoutDashboard className="h-4 w-4 mr-2" />
+                        )}
                         Area Host
-                      </a>
-                    </DropdownMenuItem>
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                    </>
                   )}
                   <DropdownMenuItem onClick={logout} className="text-destructive cursor-pointer">
                     <LogOut className="h-4 w-4 mr-2" />
