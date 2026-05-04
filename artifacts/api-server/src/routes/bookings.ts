@@ -28,9 +28,6 @@ function calcIgic(total: number | null | undefined, enabled: boolean): number | 
   return Math.round(total * IGIC_RATE * 100) / 100;
 }
 
-// =======================
-// GET BOOKINGS
-// =======================
 router.get("/bookings", async (req, res) => {
   const parsed = ListBookingsQueryParams.safeParse({
     propertyId: req.query.propertyId ? Number(req.query.propertyId) : undefined,
@@ -62,11 +59,9 @@ router.get("/bookings", async (req, res) => {
   res.json(bookings);
 });
 
-// =======================
-// CREATE BOOKING
-// =======================
 router.post("/bookings", requireUser, async (req, res) => {
   console.log("🔥 POST /bookings chiamato");
+
   const parsed = CreateBookingBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.flatten() });
@@ -75,7 +70,6 @@ router.post("/bookings", requireUser, async (req, res) => {
 
   const data = parsed.data;
 
-  // 🔹 Get property
   const [property] = await db
     .select()
     .from(propertiesTable)
@@ -86,7 +80,6 @@ router.post("/bookings", requireUser, async (req, res) => {
     return;
   }
 
-  // 🔹 Find host assignment
   const [assignment] = await db
     .select()
     .from(propertyAssignmentsTable)
@@ -94,18 +87,15 @@ router.post("/bookings", requireUser, async (req, res) => {
 
   let hostEmail: string | null = null;
 
-  // 🔹 Caso 1: host via admin_user_id
   if (assignment?.adminUserId) {
     const [host] = await db
       .select()
       .from(adminUsersTable)
       .where(eq(adminUsersTable.id, assignment.adminUserId));
 
-    // TEMP: username usato come email
     hostEmail = host?.username ?? null;
   }
 
-  // 🔹 Caso 2: fallback via customer_id
   if (!hostEmail && assignment?.customerId) {
     const [customerHost] = await db
       .select()
@@ -115,7 +105,6 @@ router.post("/bookings", requireUser, async (req, res) => {
     hostEmail = customerHost?.email ?? null;
   }
 
-  // 🔹 Check overlapping bookings
   const overlapping = await db
     .select({ id: bookingsTable.id })
     .from(bookingsTable)
@@ -137,12 +126,9 @@ router.post("/bookings", requireUser, async (req, res) => {
     return;
   }
 
-  // 🔹 Status logic
   const status = req.session?.isAdmin ? (data.status ?? "pending") : "pending";
-
   const igicAmount = calcIgic(data.totalPrice, property.igicEnabled);
 
-  // 🔹 Create booking
   const [booking] = await db
     .insert(bookingsTable)
     .values({
@@ -161,19 +147,23 @@ router.post("/bookings", requireUser, async (req, res) => {
     })
     .returning();
 
-  // =======================
-  // 📧 EMAIL SIMULATION
-  // =======================
   if (hostEmail) {
-    await sendBookingEmailToHost({
-      to: hostEmail,
-      property: property.name,
-      guest: booking.guestName,
-      email: booking.guestEmail,
-      phone: booking.guestPhone,
-      dates: `${booking.startDate} - ${booking.endDate}`,
-      total: booking.totalPrice,
-    });
+    try {
+      await sendBookingEmailToHost({
+        to: hostEmail,
+        property: property.name,
+        guest: booking.guestName,
+        email: booking.guestEmail,
+        phone: booking.guestPhone,
+        dates: `${booking.startDate} - ${booking.endDate}`,
+        total: booking.totalPrice,
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        error: "Booking creato, ma invio email fallito",
+        details: error?.message || String(error),
+      });
+    }
   } else {
     return res.status(500).json({
       error: "Host non trovato o senza email",
@@ -184,9 +174,6 @@ router.post("/bookings", requireUser, async (req, res) => {
   res.status(201).json(booking);
 });
 
-// =======================
-// GET SINGLE BOOKING
-// =======================
 router.get("/bookings/:id", requireAdmin, async (req, res) => {
   const parsed = GetBookingParams.safeParse({ id: Number(req.params.id) });
   if (!parsed.success) {
@@ -207,9 +194,6 @@ router.get("/bookings/:id", requireAdmin, async (req, res) => {
   res.json(booking);
 });
 
-// =======================
-// UPDATE BOOKING
-// =======================
 router.put("/bookings/:id", requireAdmin, async (req, res) => {
   const paramsParsed = UpdateBookingParams.safeParse({ id: Number(req.params.id) });
   if (!paramsParsed.success) {
@@ -252,6 +236,7 @@ router.put("/bookings/:id", requireAdmin, async (req, res) => {
       .select()
       .from(propertiesTable)
       .where(eq(propertiesTable.id, existing.propertyId));
+
     if (property) {
       updateData.igicAmount = calcIgic(data.totalPrice, property.igicEnabled);
     }
@@ -266,9 +251,6 @@ router.put("/bookings/:id", requireAdmin, async (req, res) => {
   res.json(updated);
 });
 
-// =======================
-// DELETE BOOKING
-// =======================
 router.delete("/bookings/:id", requireAdmin, async (req, res) => {
   const parsed = DeleteBookingParams.safeParse({ id: Number(req.params.id) });
   if (!parsed.success) {
