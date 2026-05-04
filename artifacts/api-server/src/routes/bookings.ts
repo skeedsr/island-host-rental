@@ -1,5 +1,11 @@
 import { Router } from "express";
-import { db, bookingsTable, propertiesTable } from "@workspace/db";
+import {
+  db,
+  bookingsTable,
+  propertiesTable,
+  propertyAssignmentsTable,
+  adminUsersTable,
+} from "@workspace/db";
 import { eq, and, lt, gt, ne } from "drizzle-orm";
 import {
   CreateBookingBody,
@@ -20,6 +26,9 @@ function calcIgic(total: number | null | undefined, enabled: boolean): number | 
   return Math.round(total * IGIC_RATE * 100) / 100;
 }
 
+// =======================
+// GET BOOKINGS
+// =======================
 router.get("/bookings", async (req, res) => {
   const parsed = ListBookingsQueryParams.safeParse({
     propertyId: req.query.propertyId ? Number(req.query.propertyId) : undefined,
@@ -51,6 +60,9 @@ router.get("/bookings", async (req, res) => {
   res.json(bookings);
 });
 
+// =======================
+// CREATE BOOKING
+// =======================
 router.post("/bookings", requireUser, async (req, res) => {
   const parsed = CreateBookingBody.safeParse(req.body);
   if (!parsed.success) {
@@ -60,6 +72,7 @@ router.post("/bookings", requireUser, async (req, res) => {
 
   const data = parsed.data;
 
+  // 🔹 Get property
   const [property] = await db
     .select()
     .from(propertiesTable)
@@ -70,8 +83,25 @@ router.post("/bookings", requireUser, async (req, res) => {
     return;
   }
 
-  // Check for overlapping bookings — only confirmed/blocked dates are hard blocks.
-  // Pending requests do not block dates so multiple inquiries can coexist.
+  // 🔹 Find host assignment
+  const [assignment] = await db
+    .select()
+    .from(propertyAssignmentsTable)
+    .where(eq(propertyAssignmentsTable.propertyId, data.propertyId));
+
+  let hostEmail: string | null = null;
+
+  if (assignment?.adminUserId) {
+    const [host] = await db
+      .select()
+      .from(adminUsersTable)
+      .where(eq(adminUsersTable.id, assignment.adminUserId));
+
+    // ⚠️ TEMP: username usato come email
+    hostEmail = host?.username ?? null;
+  }
+
+  // 🔹 Check overlapping bookings
   const overlapping = await db
     .select({ id: bookingsTable.id })
     .from(bookingsTable)
@@ -93,12 +123,12 @@ router.post("/bookings", requireUser, async (req, res) => {
     return;
   }
 
-  // Public bookings always start as pending regardless of what the client sends.
-  // Only admin sessions can set a different initial status.
+  // 🔹 Status logic
   const status = req.session?.isAdmin ? (data.status ?? "pending") : "pending";
 
   const igicAmount = calcIgic(data.totalPrice, property.igicEnabled);
 
+  // 🔹 Create booking
   const [booking] = await db
     .insert(bookingsTable)
     .values({
@@ -117,9 +147,31 @@ router.post("/bookings", requireUser, async (req, res) => {
     })
     .returning();
 
+  // =======================
+  // 📧 EMAIL SIMULATION
+  // =======================
+  if (hostEmail) {
+    console.log("📧 EMAIL HOST DA INVIARE:");
+    console.log({
+      to: hostEmail,
+      subject: "Nuova richiesta prenotazione",
+      property: property.name,
+      guest: booking.guestName,
+      email: booking.guestEmail,
+      phone: booking.guestPhone,
+      dates: `${booking.startDate} - ${booking.endDate}`,
+      total: booking.totalPrice,
+    });
+  } else {
+    console.warn("⚠️ Host non trovato o senza email");
+  }
+
   res.status(201).json(booking);
 });
 
+// =======================
+// GET SINGLE BOOKING
+// =======================
 router.get("/bookings/:id", requireAdmin, async (req, res) => {
   const parsed = GetBookingParams.safeParse({ id: Number(req.params.id) });
   if (!parsed.success) {
@@ -140,6 +192,9 @@ router.get("/bookings/:id", requireAdmin, async (req, res) => {
   res.json(booking);
 });
 
+// =======================
+// UPDATE BOOKING
+// =======================
 router.put("/bookings/:id", requireAdmin, async (req, res) => {
   const paramsParsed = UpdateBookingParams.safeParse({ id: Number(req.params.id) });
   if (!paramsParsed.success) {
@@ -196,6 +251,9 @@ router.put("/bookings/:id", requireAdmin, async (req, res) => {
   res.json(updated);
 });
 
+// =======================
+// DELETE BOOKING
+// =======================
 router.delete("/bookings/:id", requireAdmin, async (req, res) => {
   const parsed = DeleteBookingParams.safeParse({ id: Number(req.params.id) });
   if (!parsed.success) {
