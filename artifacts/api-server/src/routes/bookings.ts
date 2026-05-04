@@ -5,6 +5,7 @@ import {
   propertiesTable,
   propertyAssignmentsTable,
   adminUsersTable,
+  customersTable,
 } from "@workspace/db";
 import { eq, and, lt, gt, ne } from "drizzle-orm";
 import {
@@ -91,14 +92,25 @@ router.post("/bookings", requireUser, async (req, res) => {
 
   let hostEmail: string | null = null;
 
+  // 🔹 Caso 1: host via admin_user_id
   if (assignment?.adminUserId) {
     const [host] = await db
       .select()
       .from(adminUsersTable)
       .where(eq(adminUsersTable.id, assignment.adminUserId));
 
-    // ⚠️ TEMP: username usato come email
+    // TEMP: username usato come email
     hostEmail = host?.username ?? null;
+  }
+
+  // 🔹 Caso 2: fallback via customer_id
+  if (!hostEmail && assignment?.customerId) {
+    const [customerHost] = await db
+      .select()
+      .from(customersTable)
+      .where(eq(customersTable.id, assignment.customerId));
+
+    hostEmail = customerHost?.email ?? null;
   }
 
   // 🔹 Check overlapping bookings
