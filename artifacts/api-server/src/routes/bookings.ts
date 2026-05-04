@@ -17,6 +17,7 @@ import {
   ListBookingsQueryParams,
 } from "@workspace/api-zod";
 import { requireAdmin, requireUser } from "../middlewares/auth";
+import { sendBookingEmailToHost } from "../lib/mailer";
 
 const router = Router();
 
@@ -163,10 +164,8 @@ router.post("/bookings", requireUser, async (req, res) => {
   // 📧 EMAIL SIMULATION
   // =======================
   if (hostEmail) {
-    console.log("📧 EMAIL HOST DA INVIARE:");
-    console.log({
+    await sendBookingEmailToHost({
       to: hostEmail,
-      subject: "Nuova richiesta prenotazione",
       property: property.name,
       guest: booking.guestName,
       email: booking.guestEmail,
