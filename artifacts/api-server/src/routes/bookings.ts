@@ -165,17 +165,17 @@ router.post("/bookings", requireUser, async (req, res) => {
   // 📧 EMAIL SIMULATION
   // =======================
   if (hostEmail) {
-    await sendBookingEmailToHost({
-      to: hostEmail,
+    return res.status(500).json({
+      debug: "Sono arrivato al punto di invio email",
+      hostEmail,
       property: property.name,
       guest: booking.guestName,
-      email: booking.guestEmail,
-      phone: booking.guestPhone,
-      dates: `${booking.startDate} - ${booking.endDate}`,
-      total: booking.totalPrice,
     });
   } else {
-    console.warn("⚠️ Host non trovato o senza email");
+    return res.status(500).json({
+      debug: "Host non trovato",
+      assignment,
+    });
   }
 
   res.status(201).json(booking);
