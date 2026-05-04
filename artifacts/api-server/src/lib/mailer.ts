@@ -11,6 +11,10 @@ export async function sendBookingEmailToHost(data: {
   dates: string;
   total?: number | null;
 }) {
+  console.log("🔥 MAILER CHIAMATO");
+  console.log("➡️ INVIO A:", data.to);
+  console.log("➡️ API KEY PRESENTE:", !!process.env.RESEND_API_KEY);
+
   try {
     const response = await resend.emails.send({
       from: "onboarding@resend.dev",
@@ -27,8 +31,17 @@ export async function sendBookingEmailToHost(data: {
       `,
     });
 
-    console.log("📧 Email inviata:", response);
-  } catch (error) {
-    console.error("❌ Errore invio email:", error);
+    console.log("📧 RISPOSTA RESEND:", response);
+
+    if (!response || (response as any).error) {
+      console.error("❌ RESEND ERROR:", response);
+      throw new Error("Resend error");
+    }
+
+    return response;
+
+  } catch (error: any) {
+    console.error("❌ ERRORE INVIO EMAIL:", error?.message || error);
+    throw new Error(error?.message || "Errore invio email");
   }
 }
