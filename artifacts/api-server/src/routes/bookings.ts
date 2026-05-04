@@ -66,6 +66,7 @@ router.get("/bookings", async (req, res) => {
 // CREATE BOOKING
 // =======================
 router.post("/bookings", requireUser, async (req, res) => {
+  console.log("🔥 POST /bookings chiamato");
   const parsed = CreateBookingBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.flatten() });
