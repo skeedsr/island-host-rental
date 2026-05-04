@@ -117,8 +117,16 @@ const inquirySchema = z.object({
   name: z.string().min(2, "Il nome è obbligatorio"),
   email: z.string().email("Inserisci un'email valida"),
   phone: z.string().min(6, "Il telefono è obbligatorio"),
+  startDate: z.string().min(1, "La data di inizio è obbligatoria"),
+  endDate: z.string().min(1, "La data di fine è obbligatoria"),
   message: z.string().optional(),
-});
+}).refine(
+  (data) => {
+    if (!data.startDate || !data.endDate) return true;
+    return isBefore(parseISO(data.startDate), parseISO(data.endDate));
+  },
+  { message: "La data di fine deve essere successiva a quella di inizio", path: ["endDate"] }
+);
 
 type BookingFormValues = z.infer<typeof bookingSchema>;
 type InquiryFormValues = z.infer<typeof inquirySchema>;
@@ -213,6 +221,7 @@ export default function PublicProperty() {
   const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
   const [showInquiryForm, setShowInquiryForm] = useState(false);
   const [inquirySent, setInquirySent] = useState(false);
+  const [inquiryRef, setInquiryRef] = useState<string>("");
 
   const rentalType = parseRentalTypeFromSearch(window.location.search);
   const isTemporadaType = isTemporada(rentalType);
@@ -276,7 +285,7 @@ export default function PublicProperty() {
 
   const inquiryForm = useForm<InquiryFormValues>({
     resolver: zodResolver(inquirySchema),
-    defaultValues: { name: "", email: "", phone: "", message: "" },
+    defaultValues: { name: "", email: "", phone: "", startDate: "", endDate: "", message: "" },
   });
 
   const watchStart = form.watch("startDate");
@@ -309,6 +318,7 @@ export default function PublicProperty() {
           endDate: values.endDate,
           source: "Direct",
           status: "pending",
+          rentalType,
           totalPrice: estimatedTotal ?? undefined,
           notes: values.notes || undefined,
         },
@@ -328,10 +338,30 @@ export default function PublicProperty() {
     }
   };
 
-  const onInquirySubmit = (values: InquiryFormValues) => {
-    setShowInquiryForm(false);
-    setInquirySent(true);
-    inquiryForm.reset();
+  const onInquirySubmit = async (values: InquiryFormValues) => {
+    try {
+      const result = await createBooking.mutateAsync({
+        data: {
+          propertyId,
+          guestName: values.name,
+          guestEmail: values.email,
+          guestPhone: values.phone,
+          startDate: values.startDate,
+          endDate: values.endDate,
+          source: "Direct",
+          status: "pending",
+          rentalType,
+          notes: values.message || undefined,
+        },
+      });
+      queryClient.invalidateQueries({ queryKey: getListBookingsQueryKey() });
+      setInquiryRef(`ISL-${result.id.toString().padStart(4, "0")}`);
+      setShowInquiryForm(false);
+      inquiryForm.reset();
+      setInquirySent(true);
+    } catch {
+      toast.error("Invio non riuscito. Riprova.");
+    }
   };
 
   const today = format(new Date(), "yyyy-MM-dd");
@@ -871,6 +901,22 @@ export default function PublicProperty() {
                   <FormMessage />
                 </FormItem>
               )} />
+              <div className="grid grid-cols-2 gap-3">
+                <FormField control={inquiryForm.control} name="startDate" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Inizio desiderato</FormLabel>
+                    <FormControl><Input type="date" min={today} {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={inquiryForm.control} name="endDate" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Fine desiderata</FormLabel>
+                    <FormControl><Input type="date" min={inquiryForm.watch("startDate") || today} {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              </div>
               <FormField control={inquiryForm.control} name="message" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Messaggio (opzionale)</FormLabel>

@@ -39,6 +39,7 @@ const STATUS_COLORS: Record<string, string> = {
   pending: "bg-yellow-100 text-yellow-800 border-yellow-200",
   cancelled: "bg-gray-100 text-gray-500 border-gray-200",
   blocked: "bg-purple-100 text-purple-800 border-purple-200",
+  rejected: "bg-orange-100 text-orange-800 border-orange-200",
 };
 
 const bookingFormSchema = z.object({
@@ -170,6 +171,7 @@ export default function Bookings() {
                 <SelectItem value="confirmed">Confirmed</SelectItem>
                 <SelectItem value="pending">Pending</SelectItem>
                 <SelectItem value="cancelled">Cancelled</SelectItem>
+                <SelectItem value="rejected">Rejected</SelectItem>
                 <SelectItem value="blocked">Blocked</SelectItem>
               </SelectContent>
             </Select>

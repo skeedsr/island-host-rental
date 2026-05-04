@@ -34,6 +34,9 @@ import {
   Pencil,
   Trash2,
   Receipt,
+  CheckCircle2,
+  XCircle,
+  X,
 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -51,6 +54,7 @@ const STATUS_COLORS: Record<string, string> = {
   pending: "bg-yellow-100 text-yellow-800 border-yellow-200",
   cancelled: "bg-gray-100 text-gray-500 border-gray-200",
   blocked: "bg-purple-100 text-purple-800 border-purple-200",
+  rejected: "bg-orange-100 text-orange-800 border-orange-200",
 };
 
 const editSchema = z.object({
@@ -148,6 +152,21 @@ export default function BookingDetail() {
     }
   };
 
+  const handleStatusChange = async (newStatus: string) => {
+    try {
+      await updateBooking.mutateAsync({ id: bookingId, data: { status: newStatus } });
+      toast.success(
+        newStatus === "confirmed" ? "Prenotazione confermata" :
+        newStatus === "rejected" ? "Prenotazione rifiutata" :
+        "Prenotazione annullata"
+      );
+      queryClient.invalidateQueries({ queryKey: getGetBookingQueryKey(bookingId) });
+      queryClient.invalidateQueries({ queryKey: getListBookingsQueryKey() });
+    } catch {
+      toast.error("Operazione fallita");
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -206,6 +225,47 @@ export default function BookingDetail() {
           </Button>
         </div>
       </div>
+
+      {booking.status === "pending" && !editing && (
+        <Card className="border-yellow-200 bg-yellow-50/50">
+          <CardContent className="py-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="font-semibold text-sm">Richiesta in attesa di risposta</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Conferma, rifiuta o annulla questa prenotazione/richiesta.</p>
+              </div>
+              <div className="flex flex-wrap gap-2 shrink-0">
+                <Button
+                  size="sm"
+                  onClick={() => handleStatusChange("confirmed")}
+                  disabled={updateBooking.isPending}
+                  className="gap-1.5 bg-green-600 hover:bg-green-700 text-white"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5" /> Conferma
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleStatusChange("rejected")}
+                  disabled={updateBooking.isPending}
+                  className="gap-1.5 border-orange-300 text-orange-700 hover:bg-orange-50"
+                >
+                  <XCircle className="h-3.5 w-3.5" /> Rifiuta
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleStatusChange("cancelled")}
+                  disabled={updateBooking.isPending}
+                  className="gap-1.5 text-muted-foreground"
+                >
+                  <X className="h-3.5 w-3.5" /> Annulla
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {editing ? (
         <Card>
@@ -307,6 +367,7 @@ export default function BookingDetail() {
                             <SelectItem value="confirmed">Confirmed</SelectItem>
                             <SelectItem value="pending">Pending</SelectItem>
                             <SelectItem value="cancelled">Cancelled</SelectItem>
+                            <SelectItem value="rejected">Rejected</SelectItem>
                             <SelectItem value="blocked">Blocked</SelectItem>
                           </SelectContent>
                         </Select>

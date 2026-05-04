@@ -70,7 +70,8 @@ router.post("/bookings", requireUser, async (req, res) => {
     return;
   }
 
-  // Check for overlapping bookings (exclude cancelled)
+  // Check for overlapping bookings — only confirmed/blocked dates are hard blocks.
+  // Pending requests do not block dates so multiple inquiries can coexist.
   const overlapping = await db
     .select({ id: bookingsTable.id })
     .from(bookingsTable)
@@ -78,6 +79,8 @@ router.post("/bookings", requireUser, async (req, res) => {
       and(
         eq(bookingsTable.propertyId, data.propertyId),
         ne(bookingsTable.status, "cancelled"),
+        ne(bookingsTable.status, "rejected"),
+        ne(bookingsTable.status, "pending"),
         lt(bookingsTable.startDate, data.endDate),
         gt(bookingsTable.endDate, data.startDate),
       ),
@@ -89,6 +92,10 @@ router.post("/bookings", requireUser, async (req, res) => {
     });
     return;
   }
+
+  // Public bookings always start as pending regardless of what the client sends.
+  // Only admin sessions can set a different initial status.
+  const status = req.session?.isAdmin ? (data.status ?? "pending") : "pending";
 
   const igicAmount = calcIgic(data.totalPrice, property.igicEnabled);
 
@@ -102,7 +109,8 @@ router.post("/bookings", requireUser, async (req, res) => {
       startDate: data.startDate,
       endDate: data.endDate,
       source: data.source,
-      status: data.status,
+      status,
+      rentalType: data.rentalType,
       totalPrice: data.totalPrice,
       igicAmount,
       notes: data.notes,
