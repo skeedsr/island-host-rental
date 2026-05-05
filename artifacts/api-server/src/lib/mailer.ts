@@ -35,7 +35,7 @@ export async function sendBookingEmailToHost(data: {
 
     if (!response || (response as any).error) {
       console.error("❌ RESEND ERROR:", response);
-      throw new Error("Resend error");
+      throw new Error(JSON.stringify((response as any).error ?? response));
     }
 
     return response;
