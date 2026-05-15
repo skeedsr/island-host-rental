@@ -25,7 +25,9 @@ FROM node:22-alpine
 
 WORKDIR /app
 
-# Copy built API server
+# Copy built API server and workspace config for ESM module resolution
+COPY --from=0 /app/package.json ./
+COPY --from=0 /app/pnpm-workspace.yaml ./
 COPY --from=0 /app/artifacts/api-server/dist ./dist
 COPY --from=0 /app/node_modules ./node_modules
 COPY --from=0 /app/lib ./lib
