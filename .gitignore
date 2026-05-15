@@ -49,10 +49,6 @@ Thumbs.db
 .env.local
 .env.*.local
 
-# pnpm lock file (ricreiamo da package.json)
-pnpm-lock.yaml
-
 # Replit (legacy)
 .cache/
 .local/
-pnpm-lock.yaml
