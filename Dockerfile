@@ -5,24 +5,21 @@ WORKDIR /app
 # Install pnpm
 RUN npm install -g pnpm
 
-# Copy workspace config
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
-
-# Copy workspace dependencies
-COPY lib ./lib
-COPY artifacts/api-server ./artifacts/api-server
+# Copy entire workspace
+COPY . ./
 
 # Install all dependencies using frozen lockfile
 RUN pnpm install --frozen-lockfile
 
 # Build the API server
-RUN pnpm --filter @workspace/api-server build
+RUN pnpm --filter @workspace/api-server build && \
+    test -f /app/artifacts/api-server/dist/index.mjs || (echo "Build failed: index.mjs not found" && exit 1)
 
-# Copy the built API server to a predictable location
-RUN mkdir -p /app/dist && cp -r /app/artifacts/api-server/dist/* /app/dist/
+# Prune to production only (removes devDependencies)
+RUN pnpm prune --prod
 
 # Expose port
 EXPOSE 3000
 
-# Start the API server from the copied location
-CMD ["node", "--enable-source-maps", "/app/dist/index.mjs"]
+# Start the API server
+CMD ["node", "--enable-source-maps", "/app/artifacts/api-server/dist/index.mjs"]
