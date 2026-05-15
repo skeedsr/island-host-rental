@@ -18,8 +18,11 @@ RUN pnpm install --frozen-lockfile
 # Build the API server
 RUN pnpm --filter @workspace/api-server build
 
+# Copy the built API server to a predictable location
+RUN mkdir -p /app/dist && cp -r /app/artifacts/api-server/dist/* /app/dist/
+
 # Expose port
 EXPOSE 3000
 
-# Start the built API server
-CMD ["node", "--enable-source-maps", "/app/artifacts/api-server/dist/index.mjs"]
+# Start the API server from the copied location
+CMD ["node", "--enable-source-maps", "/app/dist/index.mjs"]
