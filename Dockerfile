@@ -1,42 +1,36 @@
 # Build stage
-FROM node:20-alpine AS builder
+FROM node:22-alpine
 
 WORKDIR /app
 
 # Install pnpm
 RUN npm install -g pnpm
 
-# Copy workspace files
-COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
-COPY lib ./lib
-COPY artifacts ./artifacts
-COPY scripts ./scripts
+# Copy only what we need for the API server
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 
-# Install dependencies
+# Copy the API server and dependencies
+COPY lib ./lib
+COPY artifacts/api-server ./artifacts/api-server
+
+# Install dependencies (skip workspace mode, install only root + api-server)
 RUN pnpm install --frozen-lockfile
 
-# Build
+# Build the API server
+WORKDIR /app/artifacts/api-server
 RUN pnpm run build
 
-# Runtime stage
-FROM node:20-alpine
+# Runtime
+FROM node:22-alpine
 
 WORKDIR /app
 
-# Install pnpm
-RUN npm install -g pnpm
-
-# Copy from builder
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/pnpm-lock.yaml ./pnpm-lock.yaml
-COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
-COPY --from=builder /app/lib ./lib
-COPY --from=builder /app/artifacts ./artifacts
-COPY --from=builder /app/scripts ./scripts
+# Copy built API server
+COPY --from=0 /app/artifacts/api-server/dist ./dist
+COPY --from=0 /app/node_modules ./node_modules
 
 # Expose port
-EXPOSE ${PORT:-3000}
+EXPOSE 3000
 
-# Start command
-CMD ["pnpm", "run", "start"]
+# Start
+CMD ["node", "--enable-source-maps", "./dist/index.mjs"]
