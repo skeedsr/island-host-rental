@@ -28,6 +28,7 @@ WORKDIR /app
 # Copy built API server
 COPY --from=0 /app/artifacts/api-server/dist ./dist
 COPY --from=0 /app/node_modules ./node_modules
+COPY --from=0 /app/lib ./lib
 
 # Expose port
 EXPOSE 3000
