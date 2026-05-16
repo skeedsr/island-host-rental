@@ -17,10 +17,11 @@ COPY lib ./lib
 COPY artifacts ./artifacts
 COPY scripts ./scripts
 
-# Install all dependencies with frozen lockfile
-# This ensures reproducible builds
-# Using --no-optional to skip optional dependencies that might not exist on this platform
-RUN pnpm install --frozen-lockfile --no-optional
+# Install all dependencies
+# Using --no-frozen-lockfile to allow pnpm to re-resolve dependencies
+# (the lockfile has corrupted Rollup native module entries)
+# Using --no-optional to skip optional dependencies
+RUN pnpm install --no-frozen-lockfile --no-optional
 
 # Set environment variables for build
 ENV NODE_ENV=production
