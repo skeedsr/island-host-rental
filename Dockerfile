@@ -1,7 +1,8 @@
 # ============================================================================
 # BUILD STAGE: Build the entire application
 # ============================================================================
-FROM node:22-alpine AS builder
+# Use Debian-based image for builder to avoid Alpine Linux musl issues with native modules
+FROM node:22 AS builder
 
 WORKDIR /build
 
@@ -18,7 +19,8 @@ COPY scripts ./scripts
 
 # Install all dependencies with frozen lockfile
 # This ensures reproducible builds
-RUN pnpm install --frozen-lockfile
+# Using --no-optional to skip optional dependencies that might not exist on this platform
+RUN pnpm install --frozen-lockfile --no-optional
 
 # Set environment variables for build
 ENV NODE_ENV=production
