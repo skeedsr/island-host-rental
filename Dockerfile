@@ -1,7 +1,7 @@
 # ============================================================================
-# BUILD STAGE: Build the entire application
+# BUILD STAGE: Build the API server only
 # ============================================================================
-# Use Debian-based image for builder to avoid Alpine Linux musl issues with native modules
+# Use Debian-based image for builder to avoid native module issues
 FROM node:22 AS builder
 
 WORKDIR /build
@@ -19,25 +19,16 @@ COPY scripts ./scripts
 
 # Install all dependencies
 # Using --no-frozen-lockfile to allow pnpm to re-resolve dependencies
-# (the lockfile has corrupted Rollup native module entries)
-# Using --no-optional to skip optional dependencies
-RUN pnpm install --no-frozen-lockfile --no-optional
+RUN pnpm install --no-frozen-lockfile
 
 # Set environment variables for build
 ENV NODE_ENV=production
-ENV BASE_PATH=/
 ENV PORT=3000
 
-# Build frontend (canary-rentals)
-# This must happen before api-server since api-server serves it in production
-RUN pnpm --filter @workspace/canary-rentals run build
-
-# Build API server
+# Build ONLY the API server (frontend is pre-built and committed)
 RUN pnpm --filter @workspace/api-server run build
 
-# Verify both builds succeeded
-RUN test -f /build/artifacts/canary-rentals/dist/public/index.html || \
-    (echo "Frontend build failed" && exit 1)
+# Verify API server build succeeded
 RUN test -f /build/artifacts/api-server/dist/index.mjs || \
     (echo "API server build failed" && exit 1)
 
@@ -51,15 +42,18 @@ WORKDIR /app
 # Install pnpm for production dependencies
 RUN npm install -g pnpm
 
-# Copy only what's needed from builder
-# 1. Root package files
+# Copy workspace configuration
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 
-# 2. Built applications
-COPY --from=builder /build/artifacts ./artifacts
+# Copy pre-built applications
+# Frontend is already built and committed to repo
+COPY artifacts/canary-rentals/dist ./artifacts/canary-rentals/dist
 
-# 3. Libraries (needed at runtime by api-server)
-COPY --from=builder /build/lib ./lib
+# Copy API server built from builder stage
+COPY --from=builder /build/artifacts/api-server/dist ./artifacts/api-server/dist
+
+# Copy libraries (needed at runtime by api-server)
+COPY lib ./lib
 
 # Install only production dependencies
 RUN pnpm install --frozen-lockfile --prod
