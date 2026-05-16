@@ -33,9 +33,11 @@ RUN test -f /build/artifacts/api-server/dist/index.mjs || \
     (echo "API server build failed" && exit 1)
 
 # ============================================================================
-# RUNTIME STAGE: Minimal production image
+# RUNTIME STAGE: Production image
 # ============================================================================
-FROM node:22-alpine
+# Using Debian (node:22) instead of Alpine to ensure native module compatibility
+# (native modules compiled in Debian builder won't work with Alpine's musl libc)
+FROM node:22
 
 WORKDIR /app
 
