@@ -63,7 +63,7 @@ async function buildAll() {
       "@aws-sdk/*",
       "@azure/*",
       "@opentelemetry/*",
-      "@google-cloud/*",
+      // "@google-cloud/*",  // Include in bundle instead of externalizing
       "@google/*",
       "googleapis",
       "firebase-admin",
