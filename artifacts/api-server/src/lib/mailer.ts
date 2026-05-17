@@ -1,6 +1,7 @@
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Resend email service - will be enabled when RESEND_API_KEY is configured
+// const resend = new Resend(process.env.RESEND_API_KEY);
 
 export async function sendBookingEmailToHost(data: {
   to: string;
@@ -14,6 +15,14 @@ export async function sendBookingEmailToHost(data: {
   console.log("🔥 MAILER CHIAMATO");
   console.log("➡️ INVIO A:", data.to);
   console.log("➡️ API KEY PRESENTE:", !!process.env.RESEND_API_KEY);
+
+  // Email sending disabled until RESEND_API_KEY is configured
+  if (!process.env.RESEND_API_KEY) {
+    console.log("⚠️ RESEND_API_KEY non configurato - email non inviate");
+    return { id: "mock-" + Date.now(), message: "Email mock (API key non configurato)" };
+  }
+
+  const resend = new Resend(process.env.RESEND_API_KEY);
 
   try {
     const response = await resend.emails.send({
