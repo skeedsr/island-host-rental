@@ -10,7 +10,7 @@ WORKDIR /build
 RUN npm install -g pnpm
 
 # Copy workspace configuration
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.json tsconfig.base.json ./
 
 # Copy all workspace packages
 COPY lib ./lib
