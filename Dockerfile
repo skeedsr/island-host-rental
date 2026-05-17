@@ -24,12 +24,16 @@ RUN pnpm install --no-frozen-lockfile
 # Set environment variables for build
 ENV NODE_ENV=production
 ENV PORT=3000
+ENV BASE_PATH=/
+
+# Build frontend
+RUN pnpm --filter @workspace/canary-rentals run build
 
 # Install dependencies specifically for api-server
 # (pnpm install should have done this, but being explicit)
 RUN pnpm --filter @workspace/api-server install
 
-# Build ONLY the API server (frontend is pre-built and committed)
+# Build API server
 RUN pnpm --filter @workspace/api-server run build
 
 # Verify API server build succeeded
