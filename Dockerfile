@@ -61,8 +61,9 @@ COPY --from=builder /build/artifacts/api-server/dist ./artifacts/api-server/dist
 # Copy libraries (needed at runtime by api-server)
 COPY lib ./lib
 
-# Copy node_modules from builder (contains all dependencies needed at runtime)
-COPY --from=builder /build/node_modules ./node_modules
+# Install runtime dependencies
+# This ensures all external dependencies (like @google-cloud/storage) are available
+RUN pnpm install --prefer-offline
 
 # Verify runtime files exist
 RUN test -f /app/artifacts/api-server/dist/index.mjs || \
