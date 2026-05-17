@@ -25,6 +25,10 @@ RUN pnpm install --no-frozen-lockfile
 ENV NODE_ENV=production
 ENV PORT=3000
 
+# Install dependencies specifically for api-server
+# (pnpm install should have done this, but being explicit)
+RUN pnpm --filter @workspace/api-server install
+
 # Build ONLY the API server (frontend is pre-built and committed)
 RUN pnpm --filter @workspace/api-server run build
 
